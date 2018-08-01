@@ -1,6 +1,6 @@
 [submodule "rocksdb"]
-	path = rocksdb
+	path = third-party/rocksdb
 	url = git@github.com:facebook/rocksdb.git
 [submodule "spdk"]
-	path = spdk
+	path = third-party/spdk
 	url = git@github.com:spdk/spdk.git
