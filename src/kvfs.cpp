@@ -1,3 +1,16 @@
+// Copyright 2018 Afshin Sabahi. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+/**
+ * @brief A secure keyvalue filesystem on top of Rocksdb. The goall of this file
+ * system is to be used on SPDK library to achieve exeptional performance. This would be 
+ * the fastest filesystem there is with out the IO overhead.
+ * 
+ * @signiture POSIX_FILE_SYS
+ * @file kvfs.cpp
+ * @author Afshin Sabahi
+ */
+
 #include <kvfs/kvfs.h>
 
 using namespace rocksdb;
@@ -20,8 +33,8 @@ int main(int argc, char *argv[])
     if (s.ok())
         s = db->Delete(rocksdb::WriteOptions(), key1);
 
-    cout << "Hello" << endl;
-
+    cout << "Hello" << errno << endl;
+    
     delete db;
-    return 0;
+    return 0 ;
 }

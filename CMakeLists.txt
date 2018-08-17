@@ -1,41 +1,62 @@
-﻿# CMakeList.txt : Top-level CMake project file, do global configuration
+﻿## Copyright 2018 Afshin Sabahi. All rights reserved.
+## Use of this source code is governed by a BSD-style
+## license that can be found in the LICENSE file.
+
+# CMakeList.txt : Top-level CMake project file, do global configuration
 # and include sub-projects here.
 #
 cmake_minimum_required (VERSION 3.8)
 
-project ("kvfs")
+SET(PROJECT_NAME "kvfs")
+PROJECT(${PROJECT_NAME})
 
-# Include sub-projects.
-set(rocksdb_DIR ${PROJECT_SOURCE_DIR}/rocksdb)
-set(kvfs_DIR ${PROJECT_SOURCE_DIR}/kvfs)
+#### Disable RocksDB test build ##########
+option(WITH_GFLAGS "build with GFlags" OFF)
+option(WITH_MD_LIBRARY "build with MD" OFF)
+option(WITH_FALLOCATE "build with fallocate" OFF)
+option(WITH_TESTS "build with tests" OFF)
+option(WITH_TOOLS "build with tools" OFF)
+##########################################
 
-add_subdirectory (${rocksdb_DIR})
-add_subdirectory (${kvfs_DIR})
+########## RocksDB Config #########################################
+set(ROCKSDB_STATIC_LIB rocksdb${ARTIFACT_SUFFIX})
+set(ROCKSDB_SHARED_LIB rocksdb-shared${ARTIFACT_SUFFIX})
+set(ROCKSDB_IMPORT_LIB ${ROCKSDB_SHARED_LIB})
 
-#add_subdirectory("rocksdb")
+if(WIN32)
+  set(SYSTEM_LIBS ${SYSTEM_LIBS} Shlwapi.lib Rpcrt4.lib)
+  set(LIBS ${ROCKSDB_STATIC_LIB} ${ROCKSDB_IMPORT_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
+else()
+  set(SYSTEM_LIBS ${CMAKE_THREAD_LIBS_INIT})
+  set(LIBS ${ROCKSDB_SHARED_LIB} ${ROCKSDB_IMPORT_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
+endif()
 
-#set(ROCKSDB_INCLUDE $${PROJECT_SOURCE_DIR}/rocksdb/include)
+set (ROCKSDB_SOURCE_DIR ${PROJECT_SOURCE_DIR}/third_party/rocksdb)
 
-#include_directories(${ROCKSDB_INCLUDE})
-#add_dependencies("kvfs" "rocksdb")
+add_subdirectory(${ROCKSDB_SOURCE_DIR})
 
-#option(WITH_MD_LIBRARY "build with MD" OFF)
-#option(WITH_FALLOCATE "build with fallocate" OFF)
-#option(WITH_TESTS "build with tests" OFF)
-#option(WITH_TOOLS "build with tools" OFF)
-#option(WITH_GFLAGS "build with GFlags" OFF)
+include_directories(${ROCKSDB_SOURCE_DIR})
+include_directories(${ROCKSDB_SOURCE_DIR}/include) 
+########## RocksDB Config #########################################
 
-# Rocksdb integration
-#set (THIRDPARTY_LIBS "")         # Initialization, don't touch
-#
-# Defaults
-#
-#set(ROCKSDB_HOME $ENV{THIRDPARTY_HOME}/rocksdb/)
-#set(ROCKSDB_INCLUDE ${ROCKSDB_HOME}/build/Linux-Debug/rocksdb/include)
-#set(ROCKSDB_LIB_DEBUG ${ROCKSDB_HOME}/lib/native/debug/amd64/rocksdb.lib)
-#set(ROCKSDB_LIB_RELEASE ${ROCKSDB_HOME}/lib/native/retail/amd64/rocksdb.lib)
+########## KVFS Config ############################################
 
-#include_directories(${ROCKSDB_INCLUDE})
-include_directories(${rocksdb_DIR}/include DESTINATION include)
+#SET(HEADERS
+#  "${PROJECT_SOURCE_DIR}/include/kvfs/kvfs.h"
+#)
+#SOURCE_GROUP("Header Files" FILES ${HEADERS})
 
+SET(SOURCES
+  ${PROJECT_SOURCE_DIR}/src/kvfs.cpp
+)
+SOURCE_GROUP("Source Files" FILES ${SOURCES})
 
+include_directories(${PROJECT_SOURCE_DIR}/include)
+
+ADD_EXECUTABLE(${PROJECT_NAME} ${ARTIFACT_SUFFIX} 
+  #${HEADERS}
+  ${SOURCES}
+)
+########## KVFS Config ############################################
+
+TARGET_LINK_LIBRARIES(${PROJECT_NAME}  ${LIBS})
