@@ -11,7 +11,7 @@
 
 namespace kvfs {
 
-    RocksHandles::~RocksHandles() {
+    RocksHandles::~RocksHandles(){
         db.reset();
     }
 
@@ -34,6 +34,12 @@ namespace kvfs {
 
         db.reset(dbRaw);
     }
+
+    RocksIterator::~RocksIterator() {
+        it.reset();
+    }
+
+    RocksIterator::RocksIterator(RocksHandles db) {
+        it.reset(db.db->NewIterator(ReadOptions()));
+    }
 }
-
-

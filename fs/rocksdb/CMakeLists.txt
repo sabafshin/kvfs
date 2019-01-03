@@ -8,7 +8,7 @@ set ( CMAKE_CXX_STANDARD 17 )
 set ( PROJECT_NAME "kvfs_rocksdb" )
 project ( ${PROJECT_NAME} LANGUAGES CXX )
 
-#### Disable RocksDB test build ##########
+#[[#### Disable RocksDB test build ##########
 option ( WITH_GFLAGS "build with GFlags" OFF )
 option ( WITH_MD_LIBRARY "build with MD" OFF )
 option ( WITH_FALLOCATE "build with fallocate" OFF )
@@ -35,13 +35,15 @@ add_subdirectory ( ${ROCKSDB_SOURCE_DIR} )
 
 include_directories ( ${ROCKSDB_SOURCE_DIR} )
 include_directories ( ${ROCKSDB_SOURCE_DIR}/include )
-########## RocksDB Config #########################################
+########## RocksDB Config #########################################]]
 
 set ( ROCKSDB_STORE_SRCS
       rocks_db_handler.cpp
       rocks_db_exception.cpp
       rocksdb_mutex.cpp
-      rocksdb_hash.cpp )
+      rocksdb_hash.cpp
+      rocksdb_store.cpp
+      slice.cpp)
 
 source_group ( "Source Files" FILES ${ROCKSDB_STORE_SRCS} )
 
@@ -49,12 +51,14 @@ set ( ROCKSDB_STORE_HEADERS
       rocks_db_handler.hpp
       rocks_db_exception.hpp
       rocksdb_mutex.hpp
-      rocksdb_hash.hpp )
+      rocksdb_hash.hpp
+      rocksdb_store.hpp
+      slice.hpp )
 
 source_group ( " Header Files " FILES ${ROCKSDB_STORE_HEADERS} )
 
 add_library (
-        ${PROJECT_NAME} STATIC
+        ${PROJECT_NAME} SHARED
         ${ROCKSDB_STORE_SRCS}
         ${ROCKSDB_STORE_HEADERS}
 )

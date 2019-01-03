@@ -10,7 +10,7 @@
 #ifndef KVFS_ROCKSDB_ROCKSDB_HASH_HPP
 #define KVFS_ROCKSDB_ROCKSDB_HASH_HPP
 
-#include <rocksdb/util/xxhash.h>
+#include <util/xxhash.h>
 
 using namespace rocksdb;
 

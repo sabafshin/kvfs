@@ -10,21 +10,23 @@
 #ifndef KVFS_ROCKSDB_ROCKS_DB_HANDLER_HPP
 #define KVFS_ROCKSDB_ROCKS_DB_HANDLER_HPP
 
-#include <rocksdb/db.h>
 #include <memory>
 #include <string>
+#include <rocksdb/db.h>
 
 using rocksdb::DB;
 using rocksdb::Options;
 using rocksdb::ReadOptions;
 using rocksdb::Status;
+using rocksdb::WriteOptions;
+using rocksdb::Options;
 using std::string;
 using std::unique_ptr;
 
 namespace kvfs {
 
     /**
-     * This class is the holder of the database
+     * This struct is the holder of the database
      * required to interact with our local rocksdb store.
      */
     struct RocksHandles {
@@ -49,7 +51,25 @@ namespace kvfs {
 
         RocksHandles &operator=(RocksHandles &&) = default;
     };
+
+    /**
+     * @brief Holder for iterator
+     */
+    struct RocksIterator {
+        std::unique_ptr<rocksdb::Iterator> it;
+
+        ~RocksIterator();
+
+        explicit RocksIterator(RocksHandles db);
+
+        RocksIterator(const RocksIterator &) = delete;
+
+        RocksIterator &operator=(const RocksIterator &) = delete;
+
+        RocksIterator(RocksIterator &&) = default;
+
+        RocksIterator &operator=(RocksIterator &&) = default;
+    };
+
 }
-
-
 #endif //KVFS_ROCKSDB_ROCKS_DB_HANDLER_HPP

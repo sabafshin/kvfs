@@ -21,9 +21,9 @@ namespace kvfs {
         RocksException(const rocksdb::Status &status, const std::string &msg);
 
         template<typename... Args>
-            static RocksException build(const rocksdb::Status &status, Args &&... args) {
+            static RocksException build(const rocksdb::Status &status, string arg) {
                 return RocksException(
-                        status, std::to_string(std::forward<Args>(args)...));
+                        status, arg);
             }
 
         template<typename... Args>

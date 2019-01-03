@@ -19,12 +19,19 @@ include ( kvfsConfigChecks )
 
 set( PACKAGE_VERSION "0.1")
 
+#[[include_directories(
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_BINARY_DIR}
+)]]
+
+#include_directories(BEFORE ${CMAKE_CURRENT_BINARY_DIR})
+
 configure_file(
         ${PROJECT_SOURCE_DIR}/CMake/kvfs-config.h.in
         config/kvfs_config.hpp
 )
 
-add_subdirectory(${PROJECT_SOURCE_DIR}/fs)
+
 
 #### Disable RocksDB test build ##########
 option ( WITH_GFLAGS "build with GFlags" OFF )
@@ -54,6 +61,7 @@ add_subdirectory ( ${ROCKSDB_SOURCE_DIR} )
 include_directories ( ${ROCKSDB_SOURCE_DIR} )
 include_directories ( ${ROCKSDB_SOURCE_DIR}/include )
 ########## RocksDB Config #########################################
+#[[
 
 ########## Boost Config ###########################################
 set ( Boost_USE_STATIC_LIBS OFF )
@@ -80,7 +88,9 @@ endif ()
 #    include_directories ( ${FUSE_INCLUDE_DIRS} )
 #endif ()
 ########### Fuse Config ############################################
+]]
 
+#[[
 ########## kvfs Config ############################################
 
 set ( HEADERS
@@ -114,4 +124,5 @@ add_executable ( ${PROJECT_NAME} ${ARTIFACT_SUFFIX}
 ########## kvfs Config ############################################
 
 target_link_libraries ( ${PROJECT_NAME} ${LIBS} )
-target_link_libraries ( ${PROJECT_NAME} ${SYSTEM_LIBS} )
+target_link_libraries ( ${PROJECT_NAME} ${SYSTEM_LIBS} )]]
+add_subdirectory(${PROJECT_SOURCE_DIR}/fs)

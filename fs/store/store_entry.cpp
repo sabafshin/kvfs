@@ -4,14 +4,8 @@
  * license that can be found in the LICENSE file.
  *
  *      Author: Afshin Sabahi
- *      File:   kvfs-config.h.in
+ *      File:   store_entry.cpp
  */
 
-#pragma once
+#include "store_entry.hpp"
 
-#define KVFS_VERSION "0.1"
-
-#ifndef KVFS_HAVE_ROCKSDB
-#define KVFS_HAVE_ROCKSDB
-#endif
-/* #undef KVFS_HAVE_ROCKSDB */
