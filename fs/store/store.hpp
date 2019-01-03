@@ -24,15 +24,15 @@ namespace kvfs {
 
     class Store {
     public:
-        virtual bool put(data_key key, Slice value) = 0;
+        virtual bool put(data_key key, slice value) = 0;
         virtual bool put(dir_key key, dir_value value) = 0;
-        virtual bool put2(const Slice& key, const Slice& value) = 0;
+        virtual bool put2(const slice& key, const slice& value) = 0;
 
-        virtual StoreResult get(Slice key) = 0;
-        virtual bool get(const Slice &key, string *value) = 0;
-        virtual string get2(const Slice &key) = 0;
+        virtual StoreResult get(slice key) = 0;
+        virtual bool get(const slice &key, string *value) = 0;
+        virtual string get2(const slice &key) = 0;
 
-        virtual bool delete_(Slice key) = 0;
+        virtual bool delete_(slice key) = 0;
 
         virtual bool compact() = 0;
 
@@ -44,7 +44,7 @@ namespace kvfs {
 
         virtual void close() = 0;
 
-        virtual bool hasKey(Slice key) const = 0;
+        virtual bool hasKey(slice key) const = 0;
 
     };
 }

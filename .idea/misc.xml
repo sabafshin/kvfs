@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$" />
-  <component name="ProjectPlainTextFileTypeManager">
-    <file url="file://$PROJECT_DIR$/fs/store/store_key.cpp" />
-    <file url="file://$PROJECT_DIR$/fs/store/store_key.hpp" />
-  </component>
-</project>

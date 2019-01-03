@@ -40,8 +40,8 @@ namespace kvfs {
         kvfs_file_hash_t         hash;
         kvfs_file_block_number_t block_number;
 
-        Slice to_slice() const {
-            return Slice((const char *) this, sizeof(data_key));
+        slice to_slice() const {
+            return slice((const char *) this, sizeof(data_key));
         }
     };
 
@@ -49,8 +49,8 @@ namespace kvfs {
         kvfs_file_inode_t inode;
         kvfs_file_hash_t  hash;
 
-        Slice to_slice() const {
-            return Slice((const char *) this, sizeof(dir_key));
+        slice to_slice() const {
+            return slice((const char *) this, sizeof(dir_key));
         }
     };
 
@@ -63,8 +63,8 @@ namespace kvfs {
         struct data_key   blocks_ptr;
         char              *inline_data;
 
-        Slice to_slice() const {
-            return Slice((const char *) this, sizeof(dir_value));
+        slice to_slice() const {
+            return slice((const char *) this, sizeof(dir_value));
         }
     };
 

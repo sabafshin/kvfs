@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <random>
+#include <assert.h>
 
 using namespace kvfs;
 
@@ -34,10 +35,10 @@ int main() {
     root_value.name = "/tmp/db/";
 
     std::cout << root_value.name << std::endl;
-    std::cout << root_value.to_slice().size() << std::endl;
+    std::cout << root_value.to_slice().value.size() << std::endl;
 
-    const kvfs::Slice root_slice       = kvfs::Slice("root");
-    const kvfs::Slice root_value_slice = kvfs::Slice("/tmp/");
+    kvfs::slice root_slice       = kvfs::slice("root");
+    kvfs::slice root_value_slice = kvfs::slice("/tmp/");
 
     bool status = store_->put2(root_slice, root_value_slice);
 
@@ -45,13 +46,15 @@ int main() {
         std::cout << "root insert success." << std::endl;
 
 //        string retrieve = db.get2(root_slice);
+        bool haskey = store_->hasKey(root_slice);
+        assert(haskey);
         StoreResult retrieve = store_->get(root_slice);
         retrieve.ensureValid();
         if (retrieve.isValid()) {
             std::cout << "root retrieve success." << std::endl;
             std::cout << retrieve.extractValue() << std::endl;
-            const auto *back = reinterpret_cast<const dir_value *>(retrieve.extractValue().data());
-            std::cout << back->name << std::endl;
+            /*const auto *back = reinterpret_cast<const dir_value *>(retrieve.extractValue().data());
+            std::cout << back->name << std::endl;*/
         }
     }
 

@@ -22,22 +22,22 @@ namespace kvfs {
         db_handle.db.reset();
     }
 
-    bool RocksDBStore::put(data_key key, Slice value) {
-        auto status = db_handle.db->Put(rocksdb::WriteOptions(), key.to_slice(), value);
+    bool RocksDBStore::put(data_key key, slice value) {
+        auto status = db_handle.db->Put(rocksdb::WriteOptions(), key.to_slice().value, value.value);
 
         return status.ok();
     }
 
     bool RocksDBStore::put(dir_key key, dir_value value) {
-        auto status = db_handle.db->Put(WriteOptions(), key.to_slice(), value.to_slice());
+        auto status = db_handle.db->Put(WriteOptions(), key.to_slice().value, value.to_slice().value);
 
         return status.ok();
     }
 
-    StoreResult RocksDBStore::get(Slice key) {
+    StoreResult RocksDBStore::get(slice key) {
         string value;
         auto   status = db_handle.db->Get(
-                ReadOptions(), key, &value);
+                ReadOptions(), key.value, &value);
         if (!status.ok()) {
             if (status.IsNotFound()) {
                 // Return an empty StoreResult
@@ -50,8 +50,8 @@ namespace kvfs {
         return StoreResult(std::move(value));
     }
 
-    bool RocksDBStore::delete_(Slice key) {
-        auto status = db_handle.db->Delete(WriteOptions(), key);
+    bool RocksDBStore::delete_(slice key) {
+        auto status = db_handle.db->Delete(WriteOptions(), key.value);
 
         return status.ok();
     }
@@ -100,19 +100,16 @@ namespace kvfs {
         return false;
     }
 
-    bool RocksDBStore::hasKey(Slice key) const {
+    bool RocksDBStore::hasKey(slice key) const {
         string value;
         auto   status = db_handle.db->Get(
-                ReadOptions(), key, &value);
-        if (!status.ok()) {
-            if (status.IsNotFound()) {
-                return false;
-            }
-
+                ReadOptions(), key.value, &value);
+        if (status.ok()) {
+            return true;
             /*throw RocksException::build(
                     status, "failed to get ", key, " from local store");*/
         }
-        return true;
+        return false;
     }
 
     bool RocksDBStore::sync() {
@@ -128,23 +125,24 @@ namespace kvfs {
         return status.ok();
     }
 
-    bool RocksDBStore::get(const Slice& key, string* value) {
-        auto status = db_handle.db->Get(ReadOptions(), key, value);
-
+    bool RocksDBStore::get(const slice& key, string* value) {
+        auto status = db_handle.db->Get(ReadOptions(), key.value, value);
+        assert(status.ok());
+        assert(!status.IsNotFound());
         return status.ok();
     }
 
-    string RocksDBStore::get2(const Slice &key) {
+    string RocksDBStore::get2(const slice &key) {
         string value;
 
-        if (db_handle.db->Get(ReadOptions(), key, &value).ok())
+        if (db_handle.db->Get(ReadOptions(), key.value, &value).ok())
             return value;
         return "";
     }
 
-    bool RocksDBStore::put2(const Slice &key, const Slice &value) {
-        auto status = db_handle.db->Put(WriteOptions(), key, value);
-
+    bool RocksDBStore::put2(const slice &key, const slice &value) {
+        auto status = db_handle.db->Put(WriteOptions(), key.value, value.value);
+        assert(status.ok());
         return status.ok();
     }
 

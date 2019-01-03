@@ -125,4 +125,14 @@ add_executable ( ${PROJECT_NAME} ${ARTIFACT_SUFFIX}
 
 target_link_libraries ( ${PROJECT_NAME} ${LIBS} )
 target_link_libraries ( ${PROJECT_NAME} ${SYSTEM_LIBS} )]]
+
+#[[
+add_executable( ${PROJECT_NAME}
+                ${ARTIFACT_SUFFIX}
+                test.cpp)
+
+target_link_libraries ( ${PROJECT_NAME} ${LIBS} )
+target_link_libraries ( ${PROJECT_NAME} ${SYSTEM_LIBS})
+]]
+
 add_subdirectory(${PROJECT_SOURCE_DIR}/fs)

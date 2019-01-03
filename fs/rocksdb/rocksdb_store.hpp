@@ -29,20 +29,20 @@ namespace kvfs {
 
         void close() override;
 
-        bool put(data_key key, Slice value) override;
+        bool put(data_key key, slice value) override;
         bool put(dir_key key, dir_value value) override;
-        bool put2(const Slice& key, const Slice& value) override;
+        bool put2(const slice& key, const slice& value) override;
 
-        StoreResult get(Slice key) override;
-        bool get(const Slice& key, string* value) override;
-        string get2(const Slice& key) override;
+        StoreResult get(slice key) override;
+        bool get(const slice& key, string* value) override;
+        string get2(const slice& key) override;
 
-        bool delete_(Slice key) override;
+        bool delete_(slice key) override;
 
         vector<StoreResult> get_children(dir_key key) override;
         bool get_parent(dir_key key) override;
 
-        bool hasKey(Slice key) const override;
+        bool hasKey(slice key) const override;
 
         bool sync() override;
 
