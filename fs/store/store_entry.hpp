@@ -16,58 +16,56 @@ using std::string;
 
 #include <sys/stat.h>
 #include <sys/types.h>
-#include "../kvfs_rocksdb/rocksdb_slice.hpp"
-
+#include "slice.hpp"
 
 namespace kvfs {
-    enum class StoreEntryType : uint8_t {
-        DATA_KEY, F_KEY
-    };
+enum class StoreEntryType : uint8_t {
+  DATA_KEY, F_KEY
+};
 
-    typedef uint32_t kvfs_file_hash_t;
-    typedef uint64_t kvfs_file_block_number_t;
+typedef uint32_t kvfs_file_hash_t;
+typedef uint64_t kvfs_file_block_number_t;
 
 #ifdef __USE_LARGEFILE64
-    typedef struct stat64 kvfs_stat;
-    typedef ino64_t       kvfs_file_inode_t;
+typedef struct stat64 kvfs_stat;
+typedef ino64_t kvfs_file_inode_t;
 #else
-    typedef ino_t kvfs_file_inode_t;
-    typedef struct stat kvfs_stat;
+typedef ino_t kvfs_file_inode_t;
+typedef struct stat kvfs_stat;
 #endif
 
-    struct data_key {
-        kvfs_file_inode_t        inode;
-        kvfs_file_hash_t         hash;
-        kvfs_file_block_number_t block_number;
+struct data_key {
+  kvfs_file_inode_t inode;
+  kvfs_file_hash_t hash;
+  kvfs_file_block_number_t block_number;
 
-      rocksdb_slice to_slice() const {
-        return rocksdb_slice((const char *) this, sizeof(data_key));
-        }
-    };
+  slice to_slice() const {
+    return slice((const char *) this, sizeof(data_key));
+  }
+};
 
-    struct dir_key {
-        kvfs_file_inode_t inode;
-        kvfs_file_hash_t  hash;
+struct dir_key {
+  kvfs_file_inode_t inode;
+  kvfs_file_hash_t hash;
 
-      rocksdb_slice to_slice() const {
-        return rocksdb_slice((const char *) this, sizeof(dir_key));
-        }
-    };
+  slice to_slice() const {
+    return slice((const char *) this, sizeof(dir_key));
+  }
+};
 
-    struct dir_value {
-        string            name;
-        kvfs_file_hash_t  parent_name;
-        kvfs_file_inode_t this_inode;
-        kvfs_stat         fstat;
-        uint64_t          hardlink_count;
-        struct data_key   blocks_ptr;
-        char              *inline_data;
+struct dir_value {
+  string name;
+  kvfs_file_hash_t parent_name;
+  kvfs_file_inode_t this_inode;
+  kvfs_stat fstat;
+  uint64_t hardlink_count;
+  struct data_key blocks_ptr;
+  char inline_data[4096];
 
-      rocksdb_slice to_slice() const {
-        return rocksdb_slice((const char *) this, sizeof(dir_value));
-        }
-    };
-
+  slice to_slice() const {
+    return slice((const char *) this, sizeof(dir_value));
+  }
+};
 
 }
 #endif //KVFS_STORE_ENTRY_HPP

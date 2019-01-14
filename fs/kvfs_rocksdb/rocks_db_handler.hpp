@@ -71,5 +71,5 @@ namespace kvfs {
         RocksIterator &operator=(RocksIterator &&) = default;
     };
 
-}
+}  // namespace kvfs
 #endif //KVFS_ROCKSDB_ROCKS_DB_HANDLER_HPP

@@ -7,33 +7,20 @@
  *      File:   rocksdb_slice.hpp
  */
 
-#ifndef KVFS_SLICE_HPP
-#define KVFS_SLICE_HPP
+#ifndef KVFS_ROCKSDB_SLICE_HPP
+#define KVFS_ROCKSDB_SLICE_HPP
 
 #include <string>
-#include <cstring>
-#include <assert.h>
 #include <rocksdb/slice.h>
 
 namespace kvfs {
-struct rocksdb_slice {
-        rocksdb::Slice value;
 
-  ~rocksdb_slice();
-
-  explicit rocksdb_slice(const std::string &s);
-  explicit rocksdb_slice(const char *d, size_t n);
-  explicit rocksdb_slice(std::string_view sv);
-  explicit rocksdb_slice(const char *s);
-
-  rocksdb_slice(const rocksdb_slice &) = default;
-
-  rocksdb_slice &operator=(const rocksdb_slice &) = delete;
-
-  rocksdb_slice(rocksdb_slice &&) = default;
-
-  rocksdb_slice &operator=(rocksdb_slice &&) = default;
-    };
+class rocksdb_slice : public rocksdb::Slice {
+ protected:
+  rocksdb_slice(const char *d, size_t n);
+  rocksdb_slice();
+  rocksdb_slice(const std::string &s);
+  rocksdb_slice(const char *s);
+};
 }
-
-#endif //KVFS_SLICE_HPP
+#endif //KVFS_ROCKSDB_SLICE_HPP

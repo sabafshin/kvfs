@@ -2,11 +2,11 @@
 ## Use of this source code is governed by a BSD-style
 ## license that can be found in the LICENSE file.
 
-cmake_minimum_required ( VERSION 3.12 FATAL_ERROR )
-set ( CMAKE_CXX_STANDARD 17 )
+cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
+set(CMAKE_CXX_STANDARD 17)
 
-set ( PROJECT_NAME "kvfs_rocksdb" )
-project ( ${PROJECT_NAME} LANGUAGES CXX )
+set(PROJECT_NAME "kvfs_rocksdb")
+project(${PROJECT_NAME} LANGUAGES CXX)
 
 #[[#### Disable RocksDB test build ##########
 option ( WITH_GFLAGS "build with GFlags" OFF )
@@ -37,35 +37,35 @@ include_directories ( ${ROCKSDB_SOURCE_DIR} )
 include_directories ( ${ROCKSDB_SOURCE_DIR}/include )
 ########## RocksDB Config #########################################]]
 
-set ( ROCKSDB_STORE_SRCS
-      rocks_db_handler.cpp
-      rocks_db_exception.cpp
-      rocksdb_mutex.cpp
-      rocksdb_hash.cpp
-      rocksdb_store.cpp
+set(ROCKSDB_STORE_SRCS
+    rocks_db_handler.cpp
+    rocks_db_exception.cpp
+    rocksdb_mutex.cpp
+    rocksdb_hash.cpp
+    rocksdb_store.cpp
     rocksdb_slice.cpp)
 
-source_group ( "Source Files" FILES ${ROCKSDB_STORE_SRCS} )
+source_group("Source Files" FILES ${ROCKSDB_STORE_SRCS})
 
-set ( ROCKSDB_STORE_HEADERS
-      rocks_db_handler.hpp
-      rocks_db_exception.hpp
-      rocksdb_mutex.hpp
-      rocksdb_hash.hpp
-      rocksdb_store.hpp
+set(ROCKSDB_STORE_HEADERS
+    rocks_db_handler.hpp
+    rocks_db_exception.hpp
+    rocksdb_mutex.hpp
+    rocksdb_hash.hpp
+    rocksdb_store.hpp
     rocksdb_slice.hpp)
 
-source_group ( " Header Files " FILES ${ROCKSDB_STORE_HEADERS} )
+source_group(" Header Files " FILES ${ROCKSDB_STORE_HEADERS})
 
-add_library (
-        ${PROJECT_NAME} SHARED
-        ${ROCKSDB_STORE_SRCS}
-        ${ROCKSDB_STORE_HEADERS}
+add_library(
+    ${PROJECT_NAME} SHARED
+    ${ROCKSDB_STORE_SRCS}
+    ${ROCKSDB_STORE_HEADERS}
 )
 
-target_link_libraries (
-        ${PROJECT_NAME}
-        PRIVATE
-        ${LIBS}
-        ${SYSTEM_LIBS}
+target_link_libraries(
+    ${PROJECT_NAME}
+    PRIVATE
+    ${LIBS}
+    ${SYSTEM_LIBS}
 )

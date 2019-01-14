@@ -16,42 +16,44 @@
 
 #include "../store/store.hpp"
 #include "../store/store_entry.hpp"
+#include "../store/slice.hpp"
 
 #include <rocksdb/db.h>
 
 namespace kvfs {
 
-    class RocksDBStore : public Store {
-    public:
-        explicit RocksDBStore(string _db_path);
+class RocksDBStore : public Store {
+ public:
+  explicit RocksDBStore(string _db_path);
 
-        ~RocksDBStore();
+  ~RocksDBStore();
 
-        void close() override;
+ protected:
+  void close() override;
 
-      bool put(data_key key, rocksdb_slice value) override;
-        bool put(dir_key key, dir_value value) override;
+  bool put(data_key key, slice value) override;
+  bool put(dir_key key, dir_value value) override;
 
-      bool merge(rocksdb_slice key, rocksdb_slice value) override;
+  bool merge(slice key, slice value) override;
 
-      StoreResult get(rocksdb_slice key) override;
+  StoreResult get(slice key) override;
 
-      bool delete_(rocksdb_slice key) override;
-      bool delete_range(rocksdb_slice start, rocksdb_slice end) override;
+  bool delete_(slice key) override;
+  bool delete_range(slice start, slice end) override;
 
-        vector<StoreResult> get_children(dir_key key) override;
-        bool get_parent(dir_key key) override;
+  std::vector<StoreResult> get_children(dir_key key) override;
+  bool get_parent(dir_key key) override;
 
-      bool hasKey(rocksdb_slice key) const override;
+  bool hasKey(slice key) const override;
 
-        bool sync() override;
+  bool sync() override;
 
-        bool compact() override;
+  bool compact() override;
 
-      std::unique_ptr<WriteBatch> beginWrite(size_t buf_size) override;
+  std::unique_ptr<WriteBatch> beginWrite(size_t buf_size) override;
 
-    private:
-        RocksHandles db_handle;
-    };
-}
+ private:
+  RocksHandles db_handle;
+};
+} //namespace kvfs
 #endif //KVFS_ROCKSDB_STORE_HPP
