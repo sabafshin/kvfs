@@ -16,7 +16,7 @@ using std::string;
 
 #include <sys/stat.h>
 #include <sys/types.h>
-#include "../rocksdb/slice.hpp"
+#include "../kvfs_rocksdb/rocksdb_slice.hpp"
 
 
 namespace kvfs {
@@ -40,8 +40,8 @@ namespace kvfs {
         kvfs_file_hash_t         hash;
         kvfs_file_block_number_t block_number;
 
-        slice to_slice() const {
-            return slice((const char *) this, sizeof(data_key));
+      rocksdb_slice to_slice() const {
+        return rocksdb_slice((const char *) this, sizeof(data_key));
         }
     };
 
@@ -49,8 +49,8 @@ namespace kvfs {
         kvfs_file_inode_t inode;
         kvfs_file_hash_t  hash;
 
-        slice to_slice() const {
-            return slice((const char *) this, sizeof(dir_key));
+      rocksdb_slice to_slice() const {
+        return rocksdb_slice((const char *) this, sizeof(dir_key));
         }
     };
 
@@ -63,8 +63,8 @@ namespace kvfs {
         struct data_key   blocks_ptr;
         char              *inline_data;
 
-        slice to_slice() const {
-            return slice((const char *) this, sizeof(dir_value));
+      rocksdb_slice to_slice() const {
+        return rocksdb_slice((const char *) this, sizeof(dir_value));
         }
     };
 

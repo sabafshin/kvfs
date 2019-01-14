@@ -14,7 +14,7 @@
 #include <optional>
 #include <vector>
 
-#include "../rocksdb/slice.hpp"
+#include "../kvfs_rocksdb/rocksdb_slice.hpp"
 #include "store_entry.hpp"
 #include "store_result.hpp"
 
@@ -24,15 +24,15 @@ namespace kvfs {
 
     class Store {
     public:
-        virtual bool put(data_key key, slice value) = 0;
+      virtual bool put(data_key key, rocksdb_slice value) = 0;
         virtual bool put(dir_key key, dir_value value) = 0;
-        virtual bool put2(const slice& key, const slice& value) = 0;
 
-        virtual StoreResult get(slice key) = 0;
-        virtual bool get(const slice &key, string *value) = 0;
-        virtual string get2(const slice &key) = 0;
+      virtual bool merge(rocksdb_slice key, rocksdb_slice value) = 0;
 
-        virtual bool delete_(slice key) = 0;
+      virtual StoreResult get(rocksdb_slice key) = 0;
+
+      virtual bool delete_(rocksdb_slice key) = 0;
+      virtual bool delete_range(rocksdb_slice start, rocksdb_slice end) = 0;
 
         virtual bool compact() = 0;
 
@@ -44,9 +44,37 @@ namespace kvfs {
 
         virtual void close() = 0;
 
-        virtual bool hasKey(slice key) const = 0;
+      virtual bool hasKey(rocksdb_slice key) const = 0;
+
+      class WriteBatch {
+       public:
+        virtual void put(data_key key, rocksdb_slice value) = 0;
+        virtual void put(dir_key key, dir_value value) = 0;
+
+        virtual void delete_(rocksdb_slice key) = 0;
+
+        /**
+        * Flush any pending data to the store.
+        */
+        virtual void flush() = 0;
+
+        // Forbidden copy construction/assignment; allow only moves
+        WriteBatch(const WriteBatch &) = delete;
+        WriteBatch(WriteBatch &&) = default;
+        WriteBatch &operator=(const WriteBatch &) = delete;
+        WriteBatch &operator=(WriteBatch &&) = default;
+        virtual ~WriteBatch();
+        WriteBatch() = default;
+
+       private:
+        friend class Store;
+      };
+
+      virtual std::unique_ptr<WriteBatch> beginWrite(size_t buffer_size) = 0;
 
     };
+
+Store::WriteBatch::~WriteBatch() = default;
 }
 
 #endif //KVFS_STORE_HPP

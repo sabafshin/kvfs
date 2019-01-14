@@ -11,14 +11,14 @@ project ( ${PROJECT_NAME} LANGUAGES CXX )
 set ( STORE_SRCS
       store.cpp
       store_entry.cpp
-      store_result.cpp )
+    store_result.cpp store_slice.cpp store_slice.hpp)
 
 source_group ( "Source Files" FILES ${STORE_SRCS} )
 
 set ( STORE_HEADERS
       store.hpp
       store_entry.hpp
-      store_result.hpp )
+    store_result.hpp store_slice.cpp store_slice.hpp)
 
 source_group ( " Header Files " FILES ${STORE_HEADERS} )
 

@@ -7,13 +7,10 @@
  *      File:   store_test.cpp
  */
 
-#include "../rocksdb/rocksdb_store.hpp"
-#include "../rocksdb/rocksdb_hash.hpp"
-#include "../store/store.hpp"
-#include <stdio.h>
+#include "../kvfs_rocksdb/rocksdb_store.hpp"
+#include "../kvfs_rocksdb/rocksdb_hash.hpp"
 #include <iostream>
 #include <random>
-#include <assert.h>
 
 using namespace kvfs;
 
@@ -37,24 +34,22 @@ int main() {
     std::cout << root_value.name << std::endl;
     std::cout << root_value.to_slice().value.size() << std::endl;
 
-    kvfs::slice root_slice       = kvfs::slice("root");
-    kvfs::slice root_value_slice = kvfs::slice("/tmp/");
+  kvfs::rocksdb_slice root_slice = root.to_slice();
+  kvfs::rocksdb_slice root_value_slice = root_value.to_slice();
 
-    bool status = store_->put2(root_slice, root_value_slice);
+  bool status = store_->put(root, root_value);
 
     if (status) {
         std::cout << "root insert success." << std::endl;
 
-//        string retrieve = db.get2(root_slice);
         bool haskey = store_->hasKey(root_slice);
         assert(haskey);
         StoreResult retrieve = store_->get(root_slice);
         retrieve.ensureValid();
         if (retrieve.isValid()) {
             std::cout << "root retrieve success." << std::endl;
-            std::cout << retrieve.extractValue() << std::endl;
-            /*const auto *back = reinterpret_cast<const dir_value *>(retrieve.extractValue().data());
-            std::cout << back->name << std::endl;*/
+          const auto *back = reinterpret_cast<const dir_value *>(retrieve.asString().data());
+          std::cout << back->name << std::endl;
         }
     }
 

@@ -4,29 +4,29 @@
  * license that can be found in the LICENSE file.
  *
  *      Author: Afshin Sabahi
- *      File:   slice.cpp
+ *      File:   rocksdb_slice.cpp
  */
 
 #include <memory>
-#include "slice.hpp"
+#include "rocksdb_slice.hpp"
 
 using rocksdb::Slice;
 
-kvfs::slice::~slice() = default;
+kvfs::rocksdb_slice::~rocksdb_slice() = default;
 
-kvfs::slice::slice(const std::string &s) {
+kvfs::rocksdb_slice::rocksdb_slice(const std::string &s) {
     value = Slice(s);
 }
 
-kvfs::slice::slice(const char *d, size_t n) {
+kvfs::rocksdb_slice::rocksdb_slice(const char *d, size_t n) {
     value = Slice(d, n);
 }
 
-kvfs::slice::slice(std::string_view sv) {
+kvfs::rocksdb_slice::rocksdb_slice(std::string_view sv) {
     value = Slice(sv);
 }
 
-kvfs::slice::slice(const char *s) {
+kvfs::rocksdb_slice::rocksdb_slice(const char *s) {
     value = Slice(s);
 }
 

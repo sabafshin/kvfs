@@ -18,11 +18,16 @@ namespace kvfs {
     };
 
     void RocksDBStore::close() {
-        db_handle.db->Close();
+        auto status = db_handle.db->Close();
+
+        if (!status.ok()) {
+            db_handle.db->SyncWAL();
+        }
+
         db_handle.db.reset();
     }
 
-    bool RocksDBStore::put(data_key key, slice value) {
+bool RocksDBStore::put(data_key key, rocksdb_slice value) {
         auto status = db_handle.db->Put(rocksdb::WriteOptions(), key.to_slice().value, value.value);
 
         return status.ok();
@@ -34,7 +39,7 @@ namespace kvfs {
         return status.ok();
     }
 
-    StoreResult RocksDBStore::get(slice key) {
+StoreResult RocksDBStore::get(rocksdb_slice key) {
         string value;
         auto   status = db_handle.db->Get(
                 ReadOptions(), key.value, &value);
@@ -50,7 +55,7 @@ namespace kvfs {
         return StoreResult(std::move(value));
     }
 
-    bool RocksDBStore::delete_(slice key) {
+bool RocksDBStore::delete_(rocksdb_slice key) {
         auto status = db_handle.db->Delete(WriteOptions(), key.value);
 
         return status.ok();
@@ -59,16 +64,15 @@ namespace kvfs {
     vector<StoreResult> RocksDBStore::get_children(dir_key key) {
 
         auto val = get(key.to_slice());
-        if (val.isValid()){
+        if (val.isValid()) {
             const auto *dirValue = reinterpret_cast<const dir_value *>(val.asString().data());
             kvfs_file_inode_t prefix = dirValue->this_inode;
             vector<StoreResult> result;
             auto iter = db_handle.db->NewIterator(ReadOptions());
 
-            for(iter->Seek(reinterpret_cast<const char *>(prefix));
-                    iter->Valid() && iter->key().starts_with(reinterpret_cast<const char *>(prefix));
-                        iter->Next() )
-            {
+            for (iter->Seek(reinterpret_cast<const char *>(prefix));
+                 iter->Valid() && iter->key().starts_with(reinterpret_cast<const char *>(prefix));
+                 iter->Next()) {
                 auto value = iter->value();
                 result.emplace_back(StoreResult(value.data()));
             }
@@ -84,13 +88,13 @@ namespace kvfs {
 
         if (val.isValid()) {
             const auto *dirValue = reinterpret_cast<const dir_value *>(val.asString().data());
-            kvfs_file_inode_t inode = dirValue->this_inode-1;
+            kvfs_file_inode_t inode = dirValue->this_inode - 1;
 
-            if (inode < 0){
+            if (inode < 0) {
                 return false;
             }
 
-            if (inode >= 0){
+            if (inode >= 0) {
                 kvfs_file_hash_t hash = dirValue->parent_name;
 
                 dir_key parent_key;
@@ -100,22 +104,20 @@ namespace kvfs {
         return false;
     }
 
-    bool RocksDBStore::hasKey(slice key) const {
+bool RocksDBStore::hasKey(rocksdb_slice key) const {
         string value;
-        auto   status = db_handle.db->Get(
+    auto status = db_handle.db->KeyMayExist(
                 ReadOptions(), key.value, &value);
-        if (status.ok()) {
-            return true;
+    if (!status) {
             /*throw RocksException::build(
                     status, "failed to get ", key, " from local store");*/
+        return false;
         }
         return false;
     }
 
     bool RocksDBStore::sync() {
-        WriteOptions writeOptions;
-        writeOptions.sync = true;
-        rocksdb::Status status = db_handle.db->Put(writeOptions, "sync", "");
+        rocksdb::Status status = db_handle.db->SyncWAL();
         return status.ok();
     }
 
@@ -125,25 +127,86 @@ namespace kvfs {
         return status.ok();
     }
 
-    bool RocksDBStore::get(const slice& key, string* value) {
-        auto status = db_handle.db->Get(ReadOptions(), key.value, value);
-        assert(status.ok());
-        assert(!status.IsNotFound());
+bool RocksDBStore::merge(rocksdb_slice key, rocksdb_slice value) {
+    auto status = db_handle.db->Merge(WriteOptions(), key.value, value.value);
         return status.ok();
     }
 
-    string RocksDBStore::get2(const slice &key) {
-        string value;
+bool RocksDBStore::delete_range(rocksdb_slice start, rocksdb_slice end) {
+    auto status = db_handle.db->DeleteRange(WriteOptions(), start.value, end.value);
 
-        if (db_handle.db->Get(ReadOptions(), key.value, &value).ok())
-            return value;
-        return "";
-    }
-
-    bool RocksDBStore::put2(const slice &key, const slice &value) {
-        auto status = db_handle.db->Put(WriteOptions(), key.value, value.value);
-        assert(status.ok());
         return status.ok();
     }
 
+namespace {
+class RocksDBWriteBatch : public Store::WriteBatch {
+ public:
+  void put(data_key key, rocksdb_slice value) override;
+
+  void put(dir_key key, dir_value value) override;
+
+  void delete_(rocksdb_slice key) override;
+
+  void flush() override;
+
+  RocksDBWriteBatch(RocksHandles &db_handle, size_t buffer_size);
+
+  void flush_if_needed();
+
+  RocksHandles &db_handle_;
+  rocksdb::WriteBatch write_batch;
+  size_t buf_size;
+};
+
+void RocksDBWriteBatch::flush() {
+    auto pending = write_batch.Count();
+    if (pending == 0) {
+        return;
+    }
+
+    auto status = db_handle_.db->Write(WriteOptions(), &write_batch);
+
+    if (!status.ok()) {
+        /*throw RocksException::build(
+                status, "error putting blob in Store");*/
+    }
+
+    write_batch.Clear();
 }
+
+void RocksDBWriteBatch::flush_if_needed() {
+    auto needFlush = buf_size > 0 && write_batch.GetDataSize() >= buf_size;
+
+    if (needFlush) {
+        flush();
+    }
+}
+
+RocksDBWriteBatch::RocksDBWriteBatch(kvfs::RocksHandles &db_handle, size_t buffer_size)
+        : Store::WriteBatch(), db_handle_(db_handle), write_batch(buffer_size), buf_size(buffer_size) {}
+
+void RocksDBWriteBatch::put(data_key key, rocksdb_slice value) {
+    write_batch.Put(key.to_slice().value, value.value);
+
+    flush_if_needed();
+}
+
+void RocksDBWriteBatch::put(dir_key key, dir_value value) {
+    write_batch.Put(key.to_slice().value, value.to_slice().value);
+
+    flush_if_needed();
+}
+
+void RocksDBWriteBatch::delete_(rocksdb_slice key) {
+    write_batch.Delete(key.value);
+
+    flush_if_needed();
+}
+
+}//namespace
+
+unique_ptr<Store::WriteBatch> RocksDBStore::beginWrite(size_t buf_size) {
+    return std::make_unique<RocksDBWriteBatch>(db_handle, buf_size);
+}
+
+}//namespace kvfs

@@ -1,0 +1,33 @@
+## Copyright 2018 Afshin Sabahi. All rights reserved.
+## Use of this source code is governed by a BSD-style
+## license that can be found in the LICENSE file.
+
+cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
+set(CMAKE_CXX_STANDARD 17)
+
+set(PROJECT_NAME "kvfs_inodes")
+project(${PROJECT_NAME} LANGUAGES CXX)
+
+set(INODES_SRCS
+    inode.cpp
+    )
+
+source_group("Source Files" FILES ${INODES_SRCS})
+
+set(INODES_HEADERS
+    inode.hpp
+    )
+
+source_group("Header Files" FILES ${INODES_HEADERS})
+
+add_library(
+    ${PROJECT_NAME} SHARED
+    ${INODES_SRCS}
+    ${INODES_HEADERS}
+)
+
+target_link_libraries(
+    ${PROJECT_NAME}
+    PRIVATE
+    kvfs_store
+)

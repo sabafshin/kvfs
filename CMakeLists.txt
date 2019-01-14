@@ -13,7 +13,6 @@ project ( ${PROJECT_NAME} LANGUAGES CXX )
 
 set ( CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/CMake/" )
 
-set ( CMAKE_CXX_STANDARD 17 )
 include ( CompilerSettingsUnix )
 include ( kvfsConfigChecks )
 

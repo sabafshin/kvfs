@@ -5,7 +5,7 @@
 cmake_minimum_required ( VERSION 3.12 FATAL_ERROR )
 set ( CMAKE_CXX_STANDARD 17 )
 
-set ( PROJECT_NAME "test" )
+set(PROJECT_NAME "store_test")
 project ( ${PROJECT_NAME} LANGUAGES CXX )
 
 set( TEST_SRCS
