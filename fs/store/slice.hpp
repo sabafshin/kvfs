@@ -11,9 +11,8 @@
 #define KVFS_SLICE_HPP
 
 #include <string>
-#ifdef KVFS_ROCKSDB_SLICE_HPP
 #include "../kvfs_rocksdb/rocksdb_slice.hpp"
-#endif
+
 
 namespace kvfs {
 
@@ -27,13 +26,20 @@ class slice : public rocksdb_slice {
 
   // Create a store_slice that refers to the contents of "s"
   /* implicit */
-  slice(const std::string &s) : rocksdb_slice(s) {};
+  explicit slice(const std::string &s) : rocksdb_slice(s) {};
 
   // Create a store_slice that refers to s[0,strlen(s)-1]
   /* implicit */
-  slice(const char *s) : rocksdb_slice(s) {};
+  explicit slice(const char *s) : rocksdb_slice(s) {};
 
+  slice(const slice &) = default;
+
+  slice &operator=(const slice &) = default;
+
+  slice(slice &&) = default;
+
+  slice &operator=(slice &&) = default;
 };
-}
+}  // namespace kvfs
 
 #endif //KVFS_STORE_SLICE_HPP

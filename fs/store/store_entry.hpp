@@ -10,13 +10,10 @@
 #ifndef KVFS_STORE_ENTRY_HPP
 #define KVFS_STORE_ENTRY_HPP
 
-#include <string>
-
-using std::string;
-
 #include <sys/stat.h>
 #include <sys/types.h>
 #include "slice.hpp"
+#include <string>
 
 namespace kvfs {
 enum class StoreEntryType : uint8_t {
@@ -40,7 +37,7 @@ struct data_key {
   kvfs_file_block_number_t block_number;
 
   slice to_slice() const {
-    return slice((const char *) this, sizeof(data_key));
+    return slice(reinterpret_cast<const char *>(this), sizeof(data_key));
   }
 };
 
@@ -49,23 +46,23 @@ struct dir_key {
   kvfs_file_hash_t hash;
 
   slice to_slice() const {
-    return slice((const char *) this, sizeof(dir_key));
+    return slice(reinterpret_cast<const char *>(this), sizeof(dir_key));
   }
 };
 
 struct dir_value {
-  string name;
+  std::string name;
   kvfs_file_hash_t parent_name;
   kvfs_file_inode_t this_inode;
   kvfs_stat fstat;
   uint64_t hardlink_count;
   struct data_key blocks_ptr;
-  char inline_data[4096];
+  std::string inline_data;
 
   slice to_slice() const {
-    return slice((const char *) this, sizeof(dir_value));
+    return slice(reinterpret_cast<const char *>(this), sizeof(dir_value));
   }
 };
 
-}
+}  // namespace kvfs
 #endif //KVFS_STORE_ENTRY_HPP

@@ -12,6 +12,7 @@
 using std::vector;
 
 namespace kvfs {
+
 RocksDBStore::RocksDBStore(string _db_path) : db_handle(std::move(_db_path)) {}
 
 RocksDBStore::~RocksDBStore() {
@@ -29,6 +30,7 @@ void RocksDBStore::close() {
 }
 
 bool RocksDBStore::put(data_key key, slice value) {
+
   auto status = db_handle.db->Put(rocksdb::WriteOptions(), key.to_slice(), value);
 
   return status.ok();
@@ -114,7 +116,7 @@ bool RocksDBStore::hasKey(slice key) const {
             status, "failed to get ", key, " from local store");*/
     return false;
   }
-  return false;
+  return true;
 }
 
 bool RocksDBStore::sync() {

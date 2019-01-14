@@ -16,11 +16,20 @@
 namespace kvfs {
 
 class rocksdb_slice : public rocksdb::Slice {
- protected:
+ public:
+  rocksdb_slice(const rocksdb_slice &) = default;
+
+  rocksdb_slice &operator=(const rocksdb_slice &) = default;
+
+  rocksdb_slice(rocksdb_slice &&) = default;
+
+  rocksdb_slice &operator=(rocksdb_slice &&) = default;
+
   rocksdb_slice(const char *d, size_t n);
   rocksdb_slice();
-  rocksdb_slice(const std::string &s);
-  rocksdb_slice(const char *s);
+  explicit rocksdb_slice(const std::string &s);
+  explicit rocksdb_slice(const char *s);
+
 };
-}
+}  // namespace kvfs
 #endif //KVFS_ROCKSDB_SLICE_HPP

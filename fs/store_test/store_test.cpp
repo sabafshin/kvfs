@@ -12,7 +12,8 @@
 #include <iostream>
 #include <random>
 
-namespace kvfs {
+using namespace kvfs;
+
 int main() {
   const char *name = "/tmp/db/";
   std::unique_ptr<Store> store_;
@@ -26,9 +27,10 @@ int main() {
 
   std::cout << root.hash << std::endl;
 
-  dir_value root_value = dir_value{};
+  auto root_value = dir_value{};
 
   root_value.name = "/tmp/db/";
+  root_value.this_inode = 0;
 
   std::cout << root_value.name << std::endl;
   std::cout << root_value.to_slice().size() << std::endl;
@@ -47,8 +49,10 @@ int main() {
     retrieve.ensureValid();
     if (retrieve.isValid()) {
       std::cout << "root retrieve success." << std::endl;
+//      delete name;
       const auto *back = reinterpret_cast<const dir_value *>(retrieve.asString().data());
       std::cout << back->name << std::endl;
+      std::cout << back->this_inode << std::endl;
     }
   }
 
@@ -61,4 +65,3 @@ int main() {
   store_.reset();
   return 0;
 }
-}  // namespace kvfs
