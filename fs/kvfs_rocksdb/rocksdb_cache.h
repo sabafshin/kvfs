@@ -39,7 +39,7 @@ class rocksdb_cache : public inode_cache {
 
   void evict(const slice &key) override;
 
-  static void clean_inode_handle(const rocksdb::Slice &key, void *value);
+  friend void clean_inode_handle(const rocksdb::Slice &key, void *value);
 
   static std::shared_ptr<Store> store;
 

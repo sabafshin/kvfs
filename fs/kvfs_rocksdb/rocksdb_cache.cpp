@@ -20,6 +20,16 @@ rocksdb_cache::~rocksdb_cache() {
   rc.cache.reset();
 }
 
+void clean_inode_handle(const rocksdb::Slice &key, void *value) {
+  auto *handle = reinterpret_cast<const inode_cache_handle *>(value);
+  if (handle->mode_ == INODE_WRITE) {
+    rocksdb_cache::store->put(handle->key_, handle->value_);
+  } else if (handle->mode_ == INODE_DELETE) {
+    rocksdb_cache::store->delete_(handle->key_);
+  }
+  delete handle;
+}
+
 inode_cache_handle *rocksdb_cache::insert(const slice &key, const slice &value) {
   auto *handle = new inode_cache_handle(key, value, INODE_WRITE);
   rocksdb::Cache::Handle *ch = rc.cache->Lookup(key);
@@ -89,13 +99,4 @@ void rocksdb_cache::evict(const slice &key) {
   rc.cache->Erase(key);
 }
 
-void rocksdb_cache::clean_inode_handle(const rocksdb::Slice &key, void *value) {
-  auto *handle = reinterpret_cast<const inode_cache_handle *>(value);
-  if (handle->mode_ == INODE_WRITE) {
-    store->put(handle->key_, handle->value_);
-  } else if (handle->mode_ == INODE_DELETE) {
-    store->delete_(handle->key_);
-  }
-  delete handle;
-}
 }  // namespace kvfs

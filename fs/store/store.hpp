@@ -64,7 +64,7 @@ class Store {
     friend class Store;
   };
 
-  virtual std::unique_ptr<WriteBatch> beginWrite(size_t buffer_size) = 0;
+  virtual std::unique_ptr<WriteBatch> beginWrite(size_t buffer_size = 0) = 0;
 
 };
 
