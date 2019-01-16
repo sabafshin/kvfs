@@ -57,7 +57,7 @@ class Store {
     WriteBatch(WriteBatch &&) = default;
     WriteBatch &operator=(const WriteBatch &) = delete;
     WriteBatch &operator=(WriteBatch &&) = default;
-    virtual ~WriteBatch();
+    virtual ~WriteBatch() = default;
     WriteBatch() = default;
 
    private:
@@ -68,7 +68,6 @@ class Store {
 
 };
 
-Store::WriteBatch::~WriteBatch() = default;
 } // namespace kvfs
 
 #endif //KVFS_STORE_HPP

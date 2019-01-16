@@ -10,8 +10,8 @@
 #include "rocksdb_cache.h"
 
 namespace kvfs {
-rocksdb_cache::rocksdb_cache(std::shared_ptr<Store> db) {
-  store = std::make_shared<Store>(db);
+rocksdb_cache::rocksdb_cache(const std::shared_ptr<Store> &db) {
+  store = db;
   inode_cache_handle::object_count = 0;
 }
 

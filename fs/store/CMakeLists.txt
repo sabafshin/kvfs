@@ -12,7 +12,7 @@ set(STORE_SRCS
     store.cpp
     store_entry.cpp
     store_result.cpp
-    store_mutex.cpp store_cache.cpp store_cache.h)
+    store_mutex.cpp)
 
 source_group("Source Files" FILES ${STORE_SRCS})
 
@@ -22,7 +22,7 @@ set(STORE_HEADERS
     store_result.hpp
     slice.hpp
     store_hash.h
-    store_mutex.h store_cache.cpp store_cache.h)
+    store_mutex.h)
 
 source_group(" Header Files " FILES ${STORE_HEADERS})
 

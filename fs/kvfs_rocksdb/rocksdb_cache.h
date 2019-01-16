@@ -21,7 +21,7 @@ namespace kvfs {
 class rocksdb_cache : public inode_cache {
  protected:
 
-  explicit rocksdb_cache(std::shared_ptr<Store> db);
+  explicit rocksdb_cache(const std::shared_ptr<Store> &db);
   ~rocksdb_cache();
 
   inode_cache_handle *insert(const slice &key,

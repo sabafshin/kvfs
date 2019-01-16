@@ -74,7 +74,6 @@ class inode_cache {
   virtual void evict(const slice &key) = 0;
 
 };
-
 }  // namespace kvfs
 
 #endif //KVFS_INODE_CACHE_H
