@@ -1,18 +1,16 @@
 /*
- * Copyright (c) 2018 Afshin Sabahi. All rights reserved.
+ * Copyright (c) 2019 Afshin Sabahi. All rights reserved.
  * Use of this source code is governed by a BSD-style
  * license that can be found in the LICENSE file.
  *
  *      Author: Afshin Sabahi
- *      File:   rocksdb_hash.hpp
+ *      File:   store_hash.h
  */
 
-#ifndef KVFS_ROCKSDB_ROCKSDB_HASH_HPP
-#define KVFS_ROCKSDB_ROCKSDB_HASH_HPP
+#ifndef KVFS_STORE_HASH_H
+#define KVFS_STORE_HASH_H
 
-#include <util/xxhash.h>
-
-using namespace rocksdb;
+#include <kvfs_rocksdb/rocksdb_hash.hpp>
 
 namespace kvfs {
 // Simple Hash functions
@@ -31,4 +29,5 @@ XXH_errorcode XXH32_resetState(void *state, unsigned int seed);
 
 unsigned int XXH32_intermediateDigest(void *state);
 }  // namespace kvfs
-#endif //KVFS_ROCKSDB_ROCKSDB_HASH_HPP
+
+#endif //KVFS_STORE_HASH_H

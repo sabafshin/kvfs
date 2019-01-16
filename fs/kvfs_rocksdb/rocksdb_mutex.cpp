@@ -9,47 +9,49 @@
 
 #include "rocksdb_mutex.hpp"
 
-kvfs::Mutex::~Mutex() {
-    mutex.reset();
+kvfs::rocksdb_mutex::~rocksdb_mutex() {
+  mutex.reset();
 }
 
-void kvfs::Mutex::Lock() {
-    mutex->Lock();
+void kvfs::rocksdb_mutex::Lock() {
+  mutex->Lock();
 }
 
-void kvfs::Mutex::Unlock() {
-    mutex->Unlock();
+void kvfs::rocksdb_mutex::Unlock() {
+  mutex->Unlock();
 }
 
-void kvfs::Mutex::AssertHeld() {
-    mutex->AssertHeld();
+void kvfs::rocksdb_mutex::AssertHeld() {
+  mutex->AssertHeld();
+}
+kvfs::rocksdb_mutex::rocksdb_mutex(bool adaptive) : mutex(std::make_unique<rocksdb::port::Mutex>(adaptive)) {}
+
+//------------------------------------------------------------------//
+
+kvfs::rocksdb_rw_mutex::rocksdb_rw_mutex() : rwMutex(std::make_unique<rocksdb::port::RWMutex>()) {}
+
+kvfs::rocksdb_rw_mutex::~rocksdb_rw_mutex() {
+  rwMutex.reset();
 }
 
-
-kvfs::RWMutex::RWMutex() = default;
-
-kvfs::RWMutex::~RWMutex() {
-    rwMutex.reset();
+void kvfs::rocksdb_rw_mutex::ReadLock() {
+  rwMutex->ReadLock();
 }
 
-void kvfs::RWMutex::ReadLock() {
-    rwMutex->ReadLock();
+void kvfs::rocksdb_rw_mutex::WriteLock() {
+  rwMutex->WriteLock();
 }
 
-void kvfs::RWMutex::WriteLock() {
-    rwMutex->WriteLock();
+void kvfs::rocksdb_rw_mutex::ReadUnlock() {
+  rwMutex->ReadUnlock();
 }
 
-void kvfs::RWMutex::ReadUnlock() {
-    rwMutex->ReadUnlock();
+void kvfs::rocksdb_rw_mutex::WriteUnlock() {
+  rwMutex->WriteUnlock();
 }
 
-void kvfs::RWMutex::WriteUnlock() {
-    rwMutex->WriteUnlock();
-}
-
-void kvfs::RWMutex::AssertHeld() {
-    rwMutex->AssertHeld();
+void kvfs::rocksdb_rw_mutex::AssertHeld() {
+  rwMutex->AssertHeld();
 }
 
 

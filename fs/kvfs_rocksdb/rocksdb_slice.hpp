@@ -15,7 +15,7 @@
 
 namespace kvfs {
 
-class rocksdb_slice : public rocksdb::Slice {
+struct rocksdb_slice : public rocksdb::Slice {
  public:
   rocksdb_slice(const rocksdb_slice &) = default;
 

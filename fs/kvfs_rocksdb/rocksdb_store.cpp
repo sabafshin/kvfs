@@ -13,7 +13,7 @@ using std::vector;
 
 namespace kvfs {
 
-RocksDBStore::RocksDBStore(string _db_path) : db_handle(std::move(_db_path)) {}
+RocksDBStore::RocksDBStore(const string &_db_path) : db_handle(_db_path) {}
 
 RocksDBStore::~RocksDBStore() {
   close();
@@ -29,20 +29,14 @@ void RocksDBStore::close() {
   db_handle.db.reset();
 }
 
-bool RocksDBStore::put(data_key key, slice value) {
+bool RocksDBStore::put(const slice &key, const slice &value) {
 
-  auto status = db_handle.db->Put(rocksdb::WriteOptions(), key.to_slice(), value);
-
-  return status.ok();
-}
-
-bool RocksDBStore::put(dir_key key, dir_value value) {
-  auto status = db_handle.db->Put(WriteOptions(), key.to_slice(), value.to_slice());
+  auto status = db_handle.db->Put(rocksdb::WriteOptions(), key, value);
 
   return status.ok();
 }
 
-StoreResult RocksDBStore::get(slice key) {
+StoreResult RocksDBStore::get(const slice &key) {
   string value;
   auto status = db_handle.db->Get(
       ReadOptions(), key, &value);
@@ -58,15 +52,15 @@ StoreResult RocksDBStore::get(slice key) {
   return StoreResult(std::move(value));
 }
 
-bool RocksDBStore::delete_(slice key) {
+bool RocksDBStore::delete_(const slice &key) {
   auto status = db_handle.db->Delete(WriteOptions(), key);
 
   return status.ok();
 }
 
-vector<StoreResult> RocksDBStore::get_children(dir_key key) {
+vector<StoreResult> RocksDBStore::get_children(const slice &key) {
 
-  auto val = get(key.to_slice());
+  auto val = get(key);
   if (val.isValid()) {
     const auto *dirValue = reinterpret_cast<const dir_value *>(val.asString().data());
     kvfs_file_inode_t prefix = dirValue->this_inode;
@@ -86,7 +80,7 @@ vector<StoreResult> RocksDBStore::get_children(dir_key key) {
   return vector<StoreResult>();
 }
 
-bool RocksDBStore::get_parent(dir_key key) {
+bool RocksDBStore::get_parent(const slice &key) {
   /*auto val = get(key.to_slice());
 
   if (val.isValid()) {
@@ -98,7 +92,7 @@ bool RocksDBStore::get_parent(dir_key key) {
       }
 
       if (inode >= 0) {
-          kvfs_file_hash_t hash = dirValue->parent_name;
+          kvfs_file_hash_t hash = dirValue->parent_hash;
 
           dir_key parent_key;
       }
@@ -107,7 +101,7 @@ bool RocksDBStore::get_parent(dir_key key) {
   return false;
 }
 
-bool RocksDBStore::hasKey(slice key) const {
+bool RocksDBStore::hasKey(const slice &key) const {
   string value;
   auto status = db_handle.db->KeyMayExist(
       ReadOptions(), key, &value);
@@ -130,12 +124,12 @@ bool RocksDBStore::compact() {
   return status.ok();
 }
 
-bool RocksDBStore::merge(slice key, slice value) {
+bool RocksDBStore::merge(const slice &key, const slice &value) {
   auto status = db_handle.db->Merge(WriteOptions(), key, value);
   return status.ok();
 }
 
-bool RocksDBStore::delete_range(slice start, slice end) {
+bool RocksDBStore::delete_range(const slice &start, const slice &end) {
   auto status = db_handle.db->DeleteRange(WriteOptions(), db_handle.db->DefaultColumnFamily(), start, end);
   return status.ok();
 }
@@ -143,11 +137,9 @@ bool RocksDBStore::delete_range(slice start, slice end) {
 namespace {
 class RocksDBWriteBatch : public Store::WriteBatch {
  public:
-  void put(data_key key, slice value) override;
+  void put(const slice &key, const slice &value) override;
 
-  void put(dir_key key, dir_value value) override;
-
-  void delete_(slice key) override;
+  void delete_(const slice &key) override;
 
   void flush() override;
 
@@ -187,26 +179,20 @@ void RocksDBWriteBatch::flush_if_needed() {
 RocksDBWriteBatch::RocksDBWriteBatch(kvfs::RocksHandles &db_handle, size_t buffer_size)
     : Store::WriteBatch(), db_handle_(db_handle), write_batch(buffer_size), buf_size(buffer_size) {}
 
-void RocksDBWriteBatch::put(data_key key, slice value) {
-  write_batch.Put(key.to_slice(), value);
+void RocksDBWriteBatch::put(const slice &key, const slice &value) {
+  write_batch.Put(key, value);
 
   flush_if_needed();
 }
 
-void RocksDBWriteBatch::put(dir_key key, dir_value value) {
-  write_batch.Put(key.to_slice(), value.to_slice());
-
-  flush_if_needed();
-}
-
-void RocksDBWriteBatch::delete_(slice key) {
+void RocksDBWriteBatch::delete_(const slice &key) {
   write_batch.Delete(key);
   flush_if_needed();
 }
 
 }//namespace
 
-unique_ptr<Store::WriteBatch> RocksDBStore::beginWrite(size_t buf_size) {
+std::unique_ptr<Store::WriteBatch> RocksDBStore::beginWrite(size_t buf_size) {
   return std::make_unique<RocksDBWriteBatch>(db_handle, buf_size);
 }
 

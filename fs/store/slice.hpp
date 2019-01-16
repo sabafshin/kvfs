@@ -11,12 +11,11 @@
 #define KVFS_SLICE_HPP
 
 #include <string>
-#include "../kvfs_rocksdb/rocksdb_slice.hpp"
-
+#include <kvfs_rocksdb/rocksdb_slice.hpp>
 
 namespace kvfs {
 
-class slice : public rocksdb_slice {
+struct slice : public rocksdb_slice {
  public:
   // Create an empty store_slice.
   slice() : rocksdb_slice() {};

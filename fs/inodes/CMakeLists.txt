@@ -9,14 +9,12 @@ set(PROJECT_NAME "kvfs_inodes")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
 set(INODES_SRCS
-    inode.cpp
-    )
+    inode_cache.cpp)
 
 source_group("Source Files" FILES ${INODES_SRCS})
 
 set(INODES_HEADERS
-    inode.hpp
-    )
+    inode_cache.h)
 
 source_group("Header Files" FILES ${INODES_HEADERS})
 

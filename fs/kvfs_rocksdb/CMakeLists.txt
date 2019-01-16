@@ -43,7 +43,7 @@ set(ROCKSDB_STORE_SRCS
     rocksdb_mutex.cpp
     rocksdb_hash.cpp
     rocksdb_store.cpp
-    rocksdb_slice.cpp)
+    rocksdb_slice.cpp rocksdb_cache.cpp rocksdb_cache.h)
 
 source_group("Source Files" FILES ${ROCKSDB_STORE_SRCS})
 
@@ -53,7 +53,7 @@ set(ROCKSDB_STORE_HEADERS
     rocksdb_mutex.hpp
     rocksdb_hash.hpp
     rocksdb_store.hpp
-    rocksdb_slice.hpp)
+    rocksdb_slice.hpp rocksdb_cache.cpp rocksdb_cache.h)
 
 source_group(" Header Files " FILES ${ROCKSDB_STORE_HEADERS})
 

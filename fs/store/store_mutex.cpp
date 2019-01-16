@@ -4,6 +4,6 @@
  * license that can be found in the LICENSE file.
  *
  *      Author: Afshin Sabahi
- *      File:   inode.cpp
+ *      File:   store_mutex.cpp
  */
 

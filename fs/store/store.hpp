@@ -21,34 +21,31 @@ namespace kvfs {
 
 class Store {
  public:
-  virtual bool put(data_key key, slice value) = 0;
-  virtual bool put(dir_key key, dir_value value) = 0;
+  virtual bool put(const slice &key, const slice &value) = 0;
+  virtual bool merge(const slice &key, const slice &value) = 0;
 
-  virtual bool merge(slice key, slice value) = 0;
+  virtual StoreResult get(const slice &key) = 0;
 
-  virtual StoreResult get(slice key) = 0;
-
-  virtual bool delete_(slice key) = 0;
-  virtual bool delete_range(slice start, slice end) = 0;
+  virtual bool delete_(const slice &key) = 0;
+  virtual bool delete_range(const slice &start, const slice &end) = 0;
 
   virtual bool compact() = 0;
 
-  virtual std::vector<StoreResult> get_children(dir_key key) = 0;
+  virtual std::vector<StoreResult> get_children(const slice &key) = 0;
 
-  virtual bool get_parent(dir_key key) = 0;
+  virtual bool get_parent(const slice &key) = 0;
 
   virtual bool sync() = 0;
 
   virtual void close() = 0;
 
-  virtual bool hasKey(slice key) const = 0;
+  virtual bool hasKey(const slice &key) const = 0;
 
   class WriteBatch {
    public:
-    virtual void put(data_key key, slice value) = 0;
-    virtual void put(dir_key key, dir_value value) = 0;
+    virtual void put(const slice &key, const slice &value) = 0;
 
-    virtual void delete_(slice key) = 0;
+    virtual void delete_(const slice &key) = 0;
 
     /**
     * Flush any pending data to the store.

@@ -11,7 +11,8 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 set(STORE_SRCS
     store.cpp
     store_entry.cpp
-    store_result.cpp)
+    store_result.cpp
+    store_mutex.cpp store_cache.cpp store_cache.h)
 
 source_group("Source Files" FILES ${STORE_SRCS})
 
@@ -19,7 +20,9 @@ set(STORE_HEADERS
     store.hpp
     store_entry.hpp
     store_result.hpp
-    slice.hpp)
+    slice.hpp
+    store_hash.h
+    store_mutex.h store_cache.cpp store_cache.h)
 
 source_group(" Header Files " FILES ${STORE_HEADERS})
 

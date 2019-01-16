@@ -16,36 +16,35 @@ using std::string;
 
 namespace kvfs {
 
-    class RocksException : public std::exception {
-    public:
-        RocksException(const rocksdb::Status &status, const std::string &msg);
+class RocksException : public std::exception {
+ public:
+  RocksException(const rocksdb::Status &status, const std::string &msg);
 
-        template<typename... Args>
-            static RocksException build(const rocksdb::Status &status, string arg) {
-                return RocksException(
-                        status, arg);
-            }
+  template<typename... Args>
+  static RocksException build(const rocksdb::Status &status, string arg) {
+    return RocksException(
+        status, arg);
+  }
 
-        template<typename... Args>
-            static void check(const rocksdb::Status &status, Args &&... args) {
-                if (!status.ok()) {
-                    throw build(status, std::forward<Args>(args)...);
-                }
-            }
+  template<typename... Args>
+  static void check(const rocksdb::Status &status, Args &&... args) {
+    if (!status.ok()) {
+      throw build(status, std::forward<Args>(args)...);
+    }
+  }
 
-        const char *what() const noexcept override;
+  const char *what() const noexcept override;
 
-        const rocksdb::Status &getStatus() const;
+  const rocksdb::Status &getStatus() const;
 
-        const std::string &getMsg() const;
+  const std::string &getMsg() const;
 
-    private:
-        rocksdb::Status status_;
-        std::string     msg_;
-        std::string     fullMsg_;
-    };
+ private:
+  rocksdb::Status status_;
+  std::string msg_;
+  std::string fullMsg_;
+};
 
-}
-
+}  // namespace kvfs
 
 #endif //KVFS_ROCKSDB_ROCKS_DB_EXCEPTION_HPP

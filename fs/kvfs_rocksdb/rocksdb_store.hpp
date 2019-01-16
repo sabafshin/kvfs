@@ -14,9 +14,9 @@
 #include "rocks_db_exception.hpp"
 #include "rocksdb_slice.hpp"
 
-#include "../store/store.hpp"
-#include "../store/store_entry.hpp"
-#include "../store/slice.hpp"
+#include <store/store.hpp>
+#include <store/store_entry.hpp>
+#include <store/slice.hpp>
 
 #include <rocksdb/db.h>
 
@@ -24,27 +24,26 @@ namespace kvfs {
 
 class RocksDBStore : public Store {
  public:
-  explicit RocksDBStore(string _db_path);
+  explicit RocksDBStore(const string &_db_path);
 
   ~RocksDBStore();
 
  protected:
   void close() override;
 
-  bool put(data_key key, slice value) override;
-  bool put(dir_key key, dir_value value) override;
+  bool put(const slice &key, const slice &value) override;
 
-  bool merge(slice key, slice value) override;
+  bool merge(const slice &key, const slice &value) override;
 
-  StoreResult get(slice key) override;
+  StoreResult get(const slice &key) override;
 
-  bool delete_(slice key) override;
-  bool delete_range(slice start, slice end) override;
+  bool delete_(const slice &key) override;
+  bool delete_range(const slice &start, const slice &end) override;
 
-  std::vector<StoreResult> get_children(dir_key key) override;
-  bool get_parent(dir_key key) override;
+  std::vector<StoreResult> get_children(const slice &key) override;
+  bool get_parent(const slice &key) override;
 
-  bool hasKey(slice key) const override;
+  bool hasKey(const slice &key) const override;
 
   bool sync() override;
 
