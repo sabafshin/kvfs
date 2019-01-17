@@ -54,7 +54,7 @@ class dentry_cache {
   }
 
   ~dentry_cache() {
-    delete cache_mutex;
+    delete d_cache_mutex;
   };
 
  private:
@@ -62,7 +62,7 @@ class dentry_cache {
   CacheList cache;
   CacheMap lookup;
 
-  Mutex *cache_mutex;
+  kvfs::Mutex *d_cache_mutex;
 };
 }  // namespace kvfs
 #endif //KVFS_DIRECTORY_ENTRY_H

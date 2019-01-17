@@ -91,7 +91,8 @@ class inode_cache {
   size_t size();
 
   ~inode_cache() {
-    delete cache_mutex;
+    store_.reset();
+    delete i_cache_mutex;
   };
 
  private:
@@ -101,7 +102,7 @@ class inode_cache {
 
   std::shared_ptr<Store> store_;
 
-  Mutex *cache_mutex;
+  kvfs::Mutex *i_cache_mutex;
   void clean_inode_handle(inode_cache_handle handle);
 };
 

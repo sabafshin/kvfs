@@ -12,7 +12,7 @@
 namespace kvfs {
 void inode_cache::insert(const data_key &key,
                          const std::string &value) {
-  MutexLock lock(cache_mutex);
+  MutexLock lock(i_cache_mutex);
 
   auto handle = inode_cache_handle(key, value, INODE_WRITE);
   Entry entry(key, handle);
@@ -26,7 +26,7 @@ void inode_cache::insert(const data_key &key,
   }
 }
 void inode_cache::insert(const dir_key &key, const std::string &value) {
-  MutexLock lock(cache_mutex);
+  MutexLock lock(i_cache_mutex);
 
   auto handle = inode_cache_handle(key, value, INODE_WRITE);
   Entry entry(data_key{key.inode, key.hash, 0}, handle);
@@ -40,7 +40,7 @@ void inode_cache::insert(const dir_key &key, const std::string &value) {
   }
 }
 bool inode_cache::get(const data_key &key, inode_access_mode mode, inode_cache_handle &handle) {
-  MutexLock lock(cache_mutex);
+  MutexLock lock(i_cache_mutex);
 
   auto it = lookup.find(key);
   if (it == lookup.end()) {
@@ -59,7 +59,7 @@ bool inode_cache::get(const data_key &key, inode_access_mode mode, inode_cache_h
   return true;
 }
 bool inode_cache::get(const dir_key &key, inode_access_mode mode, inode_cache_handle &handle) {
-  MutexLock lock(cache_mutex);
+  MutexLock lock(i_cache_mutex);
 
   auto it = lookup.find(data_key{key.inode, key.hash});
   if (it == lookup.end()) {
@@ -105,7 +105,7 @@ void inode_cache::clean_inode_handle(inode_cache_handle handle) {
 }
 
 void inode_cache::evict(const data_key &key) {
-  MutexLock l(cache_mutex);
+  MutexLock l(i_cache_mutex);
 
   auto it = lookup.find(key);
   if (it != lookup.end()) {
@@ -115,7 +115,7 @@ void inode_cache::evict(const data_key &key) {
   }
 }
 void inode_cache::evict(const dir_key &key) {
-  MutexLock l(cache_mutex);
+  MutexLock l(i_cache_mutex);
 
   auto it = lookup.find(data_key{key.inode, key.hash, 0});
   if (it != lookup.end()) {
@@ -125,7 +125,7 @@ void inode_cache::evict(const dir_key &key) {
   }
 }
 void inode_cache::write_back(inode_cache_handle &handle) {
-  MutexLock lock(cache_mutex);
+  MutexLock lock(i_cache_mutex);
 
   if (handle.isDir) {
     if (handle.access_mode == INODE_WRITE) {
@@ -150,7 +150,7 @@ void inode_cache::write_back(inode_cache_handle &handle) {
   }
 }
 size_t inode_cache::size() {
-  MutexLock lock(cache_mutex);
+  MutexLock lock(i_cache_mutex);
   return cache.size();
 }
 }  // namespace kvfs

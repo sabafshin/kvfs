@@ -28,4 +28,6 @@ target_link_libraries(
         ${PROJECT_NAME}
         kvfs_rocksdb
         kvfs_store
+    kvfs_inodes
+    kvfs_utils
 )
