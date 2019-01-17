@@ -79,9 +79,11 @@ struct RocksCache {
 
   RocksCache();
 
-  RocksCache(const RocksCache &) = delete;
+  size_t get_size();
 
-  RocksCache &operator=(const RocksCache &) = delete;
+  RocksCache(const RocksCache &) = default;
+
+  RocksCache &operator=(const RocksCache &) = default;
 
   RocksCache(RocksCache &&) = default;
 

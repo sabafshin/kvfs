@@ -4,6 +4,6 @@
  * license that can be found in the LICENSE file.
  *
  *      Author: Afshin Sabahi
- *      File:   store_mutex.cpp
+ *      File:   mutex_lock.cpp
  */
 

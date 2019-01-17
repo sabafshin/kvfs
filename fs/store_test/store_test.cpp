@@ -7,8 +7,8 @@
  *      File:   store_test.cpp
  */
 
-#include "../kvfs_rocksdb/rocksdb_store.hpp"
-#include "../kvfs_rocksdb/rocksdb_hash.hpp"
+#include <kvfs_rocksdb/rocksdb_store.hpp>
+#include <kvfs_rocksdb/rocksdb_hash.hpp>
 #include <iostream>
 #include <random>
 #include <iomanip>
@@ -65,9 +65,12 @@ void convert_to_struct(istream& ip, unsigned char* data,
 
 int main() {
   const char *name = "/tmp/db/";
-  std::unique_ptr<Store> store_;
+  std::shared_ptr<Store> store_;
 
-  store_ = std::make_unique<RocksDBStore>(name);
+  store_ = std::make_shared<RocksDBStore>(name);
+
+
+//  inode_cache* cache = new rocksdb_cache(store_);
 
   dir_key root{};
   auto seed = static_cast<uint32_t>(std::rand());
@@ -85,21 +88,21 @@ int main() {
   };
 
   std::cout << sizeof(kvfs_stat) << std::endl;
-  std::cout << root_value.to_slice().size() << std::endl;
+  std::cout << root_value.to_string().size() << std::endl;
 
-  /*ostringstream op;
-  convert_to_hex_string(op, reinterpret_cast<const unsigned char *>(&root_value), sizeof(dir_value));
-  string output = op.str();
-  cout << "After conversion from struct to hex string:\n"
-       << output << endl;
-*/
-  auto root_slice = root.to_slice();
-  auto root_value_slice = root_value.to_slice();
+//  ostringstream op;
+//  convert_to_hex_string(op, reinterpret_cast<const unsigned char *>(&root_value), sizeof(dir_value));
+//  string output = op.str();
+//  cout << "After conversion from struct to hex string:\n"
+//       << output << endl;
+  auto root_slice = root.to_string();
+  auto root_value_slice = root_value.to_string();
 //  istringstream ip(root_value_slice.data());
 //  dir_value back{};
 //  convert_to_struct(ip, reinterpret_cast<unsigned char*>(&back), sizeof(dir_value));
   std::cout << root_value_slice.data() << std::endl;
-  bool status = store_->put(root.to_slice(), root_value.to_slice());
+  std::cout << root_value.to_string() << std::endl;
+  bool status = store_->put(root.to_string(), root_value.to_string());
 
   if (status) {
     std::cout << "root insert success." << std::endl;

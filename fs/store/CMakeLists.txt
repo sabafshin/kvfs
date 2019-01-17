@@ -12,7 +12,7 @@ set(STORE_SRCS
     store.cpp
     store_entry.cpp
     store_result.cpp
-    store_mutex.cpp)
+    )
 
 source_group("Source Files" FILES ${STORE_SRCS})
 
@@ -20,9 +20,7 @@ set(STORE_HEADERS
     store.hpp
     store_entry.hpp
     store_result.hpp
-    slice.hpp
-    store_hash.h
-    store_mutex.h)
+    store_hash.h)
 
 source_group(" Header Files " FILES ${STORE_HEADERS})
 
@@ -35,4 +33,5 @@ target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
     kvfs_rocksdb
+    kvfs_inodes
 )

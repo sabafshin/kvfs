@@ -1,36 +1,32 @@
 /*
- * Copyright (c) 2018 Afshin Sabahi. All rights reserved.
+ * Copyright (c) 2019 Afshin Sabahi. All rights reserved.
  * Use of this source code is governed by a BSD-style
  * license that can be found in the LICENSE file.
  *
  *      Author: Afshin Sabahi
- *      File:   dentry.cpp
+ *      File:   directory_entry.cpp
  */
 
+#include "directory_entry.h"
 
-#include <kvfs/dentry.hpp>
-
-using rocksdb::MutexLock;
-
-namespace kvfs {
-
-bool DentryCache::Find(_meta_key_t &key, kvfs_inode_t &value) {
-  MutexLock lock_cache_mutex(&cache_mutex);
+bool kvfs::dentry_cache::find(kvfs::dir_key &key, kvfs::dir_value &value) {
+  MutexLock l(cache_mutex);
 
   auto it = lookup.find(key);
   if (it == lookup.end()) {
     return false;
   } else {
+
     value = it->second->second;
     cache.push_front(*(it->second));
     cache.erase(it->second);
     lookup[key] = cache.begin();
+
     return true;
   }
 }
-
-void DentryCache::Insert(_meta_key_t &key, const kvfs_inode_t &value) {
-  MutexLock lock_cache_mutex(&cache_mutex);
+void kvfs::dentry_cache::insert(kvfs::dir_key &key, kvfs::dir_value &value) {
+  MutexLock l(cache_mutex);
 
   Entry ent(key, value);
   cache.push_front(ent);
@@ -39,15 +35,13 @@ void DentryCache::Insert(_meta_key_t &key, const kvfs_inode_t &value) {
     lookup.erase(cache.back().first);
     cache.pop_back();
   }
-}
 
-void DentryCache::Evict(_meta_key_t &key) {
-  MutexLock lock_cache_mutex(&cache_mutex);
+}
+void kvfs::dentry_cache::evict(kvfs::dir_key &key) {
+  MutexLock l(cache_mutex);
 
   auto it = lookup.find(key);
   if (it != lookup.end()) {
     lookup.erase(it);
   }
-}
-
 }

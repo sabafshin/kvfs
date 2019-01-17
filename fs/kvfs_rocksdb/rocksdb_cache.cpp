@@ -10,30 +10,25 @@
 #include "rocksdb_cache.h"
 
 namespace kvfs {
-rocksdb_cache::rocksdb_cache(const std::shared_ptr<Store> &db) {
-  store = db;
-  inode_cache_handle::object_count = 0;
-}
+rocksdb_cache::rocksdb_cache(std::shared_ptr<Store> s) : store(s) {}
 
 rocksdb_cache::~rocksdb_cache() {
   store.reset();
   rc.cache.reset();
 }
 
-void clean_inode_handle(const rocksdb::Slice &key, void *value) {
-  auto *handle = reinterpret_cast<const inode_cache_handle *>(value);
-  if (handle->mode_ == INODE_WRITE) {
-    rocksdb_cache::store->put(handle->key_, handle->value_);
-  } else if (handle->mode_ == INODE_DELETE) {
-    rocksdb_cache::store->delete_(handle->key_);
-  }
-  delete handle;
-}
-
 inode_cache_handle *rocksdb_cache::insert(const slice &key, const slice &value) {
   auto *handle = new inode_cache_handle(key, value, INODE_WRITE);
   rocksdb::Cache::Handle *ch = rc.cache->Lookup(key);
-  auto s = rc.cache->Insert(key, (void *) ch, 1, clean_inode_handle);
+  size_t one_usage_size = rc.cache->GetUsage(ch);
+  size_t total_used_number = rc.cache->GetUsage() / one_usage_size;
+  if (total_used_number == CACHE_SIZE) {
+    bool n_ch = rc.cache->Ref(ch);
+    if (n_ch) {
+
+    }
+  }
+  auto s = rc.cache->Insert(key, (void *) ch, 1, nullptr);
   if (s.ok()) {
     handle->pointer = ch;
     return handle;
@@ -47,7 +42,7 @@ inode_cache_handle *rocksdb_cache::get(const slice &key, const inode_access_mode
     StoreResult value = store->get(key);
     if (value.isValid()) {
       handle = new inode_cache_handle(key, slice(value.asString()), mode);
-      auto s = rc.cache->Insert(key, ch, 1, clean_inode_handle);
+      auto s = rc.cache->Insert(key, ch, 1, nullptr);
       handle->pointer = ch;
     }
 
@@ -97,6 +92,15 @@ void rocksdb_cache::batch_commit(inode_cache_handle *handle1, inode_cache_handle
 }
 void rocksdb_cache::evict(const slice &key) {
   rc.cache->Erase(key);
+}
+void rocksdb_cache::clean_inode_handle(const slice &key, void *value) {
+  auto *handle = reinterpret_cast<const inode_cache_handle *>(value);
+  if (handle->mode_ == INODE_WRITE) {
+    store->put(handle->key_, handle->value_);
+  } else if (handle->mode_ == INODE_DELETE) {
+    store->delete_(handle->key_);
+  }
+  delete handle;
 }
 
 }  // namespace kvfs

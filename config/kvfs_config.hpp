@@ -15,5 +15,10 @@
 #define KVFS_HAVE_ROCKSDB
 #endif
 
-#define CACHE_SIZE 512
 /* #undef KVFS_HAVE_ROCKSDB */
+
+#define CACHE_SIZE              512
+#define KVFS_LINK_MAX           32000
+#define KVFS_DEF_BLOCK_SIZE_4K  4096
+#define KVFS_INODE_SIZE         64
+#define KVFS_NAME_LEN           255

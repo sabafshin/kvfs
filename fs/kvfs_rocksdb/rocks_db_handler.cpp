@@ -46,6 +46,9 @@ RocksCache::~RocksCache() {
   cache.reset();
 }
 RocksCache::RocksCache() {
-  cache = rocksdb::NewLRUCache(CACHE_SIZE);
+  cache = rocksdb::NewLRUCache(CACHE_SIZE, -1, true);
+}
+size_t RocksCache::get_size() {
+  return cache->GetUsage() / cache->GetCapacity() % CACHE_SIZE;
 }
 }  // namespace kvfs

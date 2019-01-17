@@ -12,8 +12,8 @@
 
 #include <memory>
 #include <vector>
+#include <string>
 
-#include "slice.hpp"
 #include "store_entry.hpp"
 #include "store_result.hpp"
 
@@ -21,31 +21,31 @@ namespace kvfs {
 
 class Store {
  public:
-  virtual bool put(const slice &key, const slice &value) = 0;
-  virtual bool merge(const slice &key, const slice &value) = 0;
+  virtual bool put(const std::string &key, const std::string &value) = 0;
+  virtual bool merge(const std::string &key, const std::string &value) = 0;
 
-  virtual StoreResult get(const slice &key) = 0;
+  virtual StoreResult get(const std::string &key) = 0;
 
-  virtual bool delete_(const slice &key) = 0;
-  virtual bool delete_range(const slice &start, const slice &end) = 0;
+  virtual bool delete_(const std::string &key) = 0;
+  virtual bool delete_range(const std::string &start, const std::string &end) = 0;
 
   virtual bool compact() = 0;
 
-  virtual std::vector<StoreResult> get_children(const slice &key) = 0;
+  virtual std::vector<StoreResult> get_children(const std::string &key) = 0;
 
-  virtual bool get_parent(const slice &key) = 0;
+  virtual StoreResult get_parent(const std::string &key) = 0;
 
   virtual bool sync() = 0;
 
   virtual void close() = 0;
 
-  virtual bool hasKey(const slice &key) const = 0;
+  virtual bool hasKey(const std::string &key) const = 0;
 
   class WriteBatch {
    public:
-    virtual void put(const slice &key, const slice &value) = 0;
+    virtual void put(const std::string &key, const std::string &value) = 0;
 
-    virtual void delete_(const slice &key) = 0;
+    virtual void delete_(const std::string &key) = 0;
 
     /**
     * Flush any pending data to the store.

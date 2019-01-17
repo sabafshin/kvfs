@@ -17,13 +17,38 @@
 #include <memory>
 
 namespace kvfs {
+struct inode_cache_handle {
+  slice key_;
+  slice value_;
+  inode_access_mode mode_;
+
+  void *pointer;
+  static int object_count;
+
+  inode_cache_handle() :
+      mode_(INODE_READ) {
+    ++object_count;
+  }
+
+  inode_cache_handle(const slice &key,
+                     const slice &value,
+                     inode_access_mode mode) :
+      key_(key), value_(value), mode_(mode) {
+    ++object_count;
+  }
+
+  ~inode_cache_handle() {
+    --object_count;
+  }
+};
 
 class rocksdb_cache : public inode_cache {
- protected:
+ public:
 
-  explicit rocksdb_cache(const std::shared_ptr<Store> &db);
+  explicit rocksdb_cache(std::shared_ptr<Store> store);
   ~rocksdb_cache();
 
+ protected:
   inode_cache_handle *insert(const slice &key,
                              const slice &value) override;
 
@@ -39,11 +64,10 @@ class rocksdb_cache : public inode_cache {
 
   void evict(const slice &key) override;
 
-  friend void clean_inode_handle(const rocksdb::Slice &key, void *value);
-
-  static std::shared_ptr<Store> store;
+  void clean_inode_handle(const slice &key, void *value);
 
  private:
+  std::shared_ptr<Store> store;
   RocksCache rc;
 };
 }  // namespace kvfs

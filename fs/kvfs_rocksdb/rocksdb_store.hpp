@@ -12,11 +12,9 @@
 
 #include "rocks_db_handler.hpp"
 #include "rocks_db_exception.hpp"
-#include "rocksdb_slice.hpp"
 
 #include <store/store.hpp>
 #include <store/store_entry.hpp>
-#include <store/slice.hpp>
 
 #include <rocksdb/db.h>
 
@@ -31,19 +29,19 @@ class RocksDBStore : public Store {
  protected:
   void close() override;
 
-  bool put(const slice &key, const slice &value) override;
+  bool put(const std::string &key, const std::string &value) override;
 
-  bool merge(const slice &key, const slice &value) override;
+  bool merge(const std::string &key, const std::string &value) override;
 
-  StoreResult get(const slice &key) override;
+  StoreResult get(const std::string &key) override;
 
-  bool delete_(const slice &key) override;
-  bool delete_range(const slice &start, const slice &end) override;
+  bool delete_(const std::string &key) override;
+  bool delete_range(const std::string &start, const std::string &end) override;
 
-  std::vector<StoreResult> get_children(const slice &key) override;
-  bool get_parent(const slice &key) override;
+  std::vector<StoreResult> get_children(const std::string &key) override;
+  StoreResult get_parent(const std::string &key) override;
 
-  bool hasKey(const slice &key) const override;
+  bool hasKey(const std::string &key) const override;
 
   bool sync() override;
 
