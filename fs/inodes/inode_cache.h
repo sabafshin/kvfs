@@ -74,7 +74,7 @@ class inode_cache {
   typedef std::unordered_map<data_key, std::list<Entry>::iterator,
                              cache_hash, cache_comp> CacheMap;
 
-  explicit inode_cache(size_t size, std::shared_ptr<Store> store)
+  explicit inode_cache(size_t size, const std::shared_ptr<Store> store)
       : max_size(size), store_(store) {}
 
   void insert(const data_key &key, const std::string &value);
@@ -90,10 +90,7 @@ class inode_cache {
 
   size_t size();
 
-  ~inode_cache() {
-    store_.reset();
-    delete i_cache_mutex;
-  };
+  ~inode_cache() = default;
 
  private:
   CacheList cache;
@@ -102,7 +99,6 @@ class inode_cache {
 
   std::shared_ptr<Store> store_;
 
-  kvfs::Mutex *i_cache_mutex;
   void clean_inode_handle(inode_cache_handle handle);
 };
 

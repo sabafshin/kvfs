@@ -17,7 +17,7 @@
 namespace kvfs {
 class MutexLock {
  public:
-  explicit MutexLock(Mutex *mu) : mu_(mu) {
+  explicit MutexLock() : mu_(new Mutex()) {
     this->mu_->Lock();
   }
   ~MutexLock() { this->mu_->Unlock(); }
@@ -37,7 +37,7 @@ class MutexLock {
 class ReadLock {
  public:
 
-  explicit ReadLock(RWMutex *mu) : mu_(mu) {
+  explicit ReadLock() : mu_(new RWMutex()) {
     this->mu_->ReadLock();
   }
   ~ReadLock() { this->mu_->ReadUnlock(); }
@@ -54,8 +54,8 @@ class ReadLock {
 //
 class ReadUnlock {
  public:
-  explicit ReadUnlock(RWMutex *mu) : mu_(mu) {
-    mu->AssertHeld();
+  explicit ReadUnlock() : mu_(new RWMutex()) {
+    this->mu_->AssertHeld();
   }
   ~ReadUnlock() { mu_->ReadUnlock(); }
 
@@ -73,7 +73,7 @@ class ReadUnlock {
 //
 class WriteLock {
  public:
-  explicit WriteLock(RWMutex *mu) : mu_(mu) {
+  explicit WriteLock() : mu_(new RWMutex()) {
     this->mu_->WriteLock();
   }
   ~WriteLock() { this->mu_->WriteUnlock(); }

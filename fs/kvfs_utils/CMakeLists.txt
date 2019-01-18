@@ -26,10 +26,11 @@ add_library(
     ${UTILS_HEADERS}
 )
 
+#[[
 target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
-    kvfs_rocksdb
     kvfs_store
+    kvfs_rocksdb
     kvfs_inodes
-)
+)]]

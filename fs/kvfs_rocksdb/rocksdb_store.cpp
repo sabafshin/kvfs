@@ -13,32 +13,31 @@ using std::vector;
 
 namespace kvfs {
 
-RocksDBStore::RocksDBStore(const string &_db_path) : db_handle(_db_path) {}
+RocksDBStore::RocksDBStore(const string &_db_path) : db_handle(std::make_shared<RocksHandles>(_db_path)) {}
 
 RocksDBStore::~RocksDBStore() {
-  close();
+  db_handle->db.reset();
+  db_handle.reset();
 };
 
 void RocksDBStore::close() {
-  auto status = db_handle.db->Close();
-
-  if (!status.ok()) {
-    db_handle.db->SyncWAL();
-  }
-
-  db_handle.db.reset();
+  db_handle->db.reset();
+//  db_handle.reset();
 }
 
 bool RocksDBStore::put(const std::string &key, const std::string &value) {
+  auto txn = db_handle->db->BeginTransaction(WriteOptions());
 
-  auto status = db_handle.db->Put(rocksdb::WriteOptions(), key, value);
+  txn->Put(key, value);
+
+  auto status = txn->Commit();
 
   return status.ok();
 }
 
 StoreResult RocksDBStore::get(const std::string &key) {
   string value;
-  auto status = db_handle.db->Get(
+  auto status = db_handle->db->Get(
       ReadOptions(), key, &value);
   if (!status.ok()) {
     if (status.IsNotFound()) {
@@ -53,8 +52,9 @@ StoreResult RocksDBStore::get(const std::string &key) {
 }
 
 bool RocksDBStore::delete_(const std::string &key) {
-  auto status = db_handle.db->Delete(WriteOptions(), key);
-
+  auto txn = db_handle->db->BeginTransaction(WriteOptions());
+  txn->Delete(key);
+  auto status = txn->Commit();
   return status.ok();
 }
 
@@ -65,7 +65,7 @@ vector<StoreResult> RocksDBStore::get_children(const std::string &key) {
     const auto *dirValue = reinterpret_cast<const dir_value *>(val.asString().data());
     kvfs_file_inode_t prefix = dirValue->this_inode;
     vector<StoreResult> result;
-    auto iter = db_handle.db->NewIterator(ReadOptions());
+    auto iter = db_handle->db->NewIterator(ReadOptions());
 
     for (iter->Seek(reinterpret_cast<const char *>(prefix));
          iter->Valid() && iter->key().starts_with(reinterpret_cast<const char *>(prefix));
@@ -102,7 +102,7 @@ StoreResult RocksDBStore::get_parent(const std::string &key) {
 
 bool RocksDBStore::hasKey(const std::string &key) const {
   string value;
-  auto status = db_handle.db->KeyMayExist(
+  auto status = db_handle->db->KeyMayExist(
       ReadOptions(), key, &value);
   if (!status) {
     /*throw RocksException::build(
@@ -113,24 +113,35 @@ bool RocksDBStore::hasKey(const std::string &key) const {
 }
 
 bool RocksDBStore::sync() {
-  rocksdb::Status status = db_handle.db->SyncWAL();
+  rocksdb::Status status = db_handle->db->SyncWAL();
   return status.ok();
 }
 
 bool RocksDBStore::compact() {
-  auto status = db_handle.db->CompactRange(rocksdb::CompactRangeOptions(), nullptr, nullptr);
+  auto status = db_handle->db->CompactRange(rocksdb::CompactRangeOptions(), nullptr, nullptr);
 
   return status.ok();
 }
 
 bool RocksDBStore::merge(const std::string &key, const std::string &value) {
-  auto status = db_handle.db->Merge(WriteOptions(), key, value);
+  auto txn = db_handle->db->BeginTransaction(WriteOptions());
+  txn->Merge(key, value);
+  auto status = txn->Commit();
   return status.ok();
 }
 
 bool RocksDBStore::delete_range(const std::string &start, const std::string &end) {
-  auto status = db_handle.db->DeleteRange(WriteOptions(), db_handle.db->DefaultColumnFamily(), start, end);
-  return status.ok();
+  auto txn = db_handle->db->BeginTransaction(WriteOptions());
+
+  txn->SetSavePoint();
+  auto status = db_handle->db->DeleteRange(WriteOptions(), db_handle->db->DefaultColumnFamily(), start, end);
+  if (!status.ok()) {
+    txn->RollbackToSavePoint();
+    return false;
+  }
+  txn->PopSavePoint();
+
+  return true;
 }
 
 namespace {
@@ -142,11 +153,11 @@ class RocksDBWriteBatch : public Store::WriteBatch {
 
   void flush() override;
 
-  RocksDBWriteBatch(RocksHandles &db_handle, size_t buffer_size);
+  RocksDBWriteBatch(std::shared_ptr<RocksHandles> db_handle, size_t buffer_size);
 
   void flush_if_needed();
 
-  RocksHandles &db_handle_;
+  std::shared_ptr<RocksHandles> db_handle_;
   rocksdb::WriteBatch write_batch;
   size_t buf_size;
 };
@@ -157,7 +168,7 @@ void RocksDBWriteBatch::flush() {
     return;
   }
 
-  auto status = db_handle_.db->Write(WriteOptions(), &write_batch);
+  auto status = db_handle_->db->Write(WriteOptions(), &write_batch);
 
   if (!status.ok()) {
     /*throw RocksException::build(
@@ -175,7 +186,7 @@ void RocksDBWriteBatch::flush_if_needed() {
   }
 }
 
-RocksDBWriteBatch::RocksDBWriteBatch(kvfs::RocksHandles &db_handle, size_t buffer_size)
+RocksDBWriteBatch::RocksDBWriteBatch(const std::shared_ptr<kvfs::RocksHandles> db_handle, size_t buffer_size)
     : Store::WriteBatch(), db_handle_(db_handle), write_batch(buffer_size), buf_size(buffer_size) {}
 
 void RocksDBWriteBatch::put(const std::string &key, const std::string &value) {

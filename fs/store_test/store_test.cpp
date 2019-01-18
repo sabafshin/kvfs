@@ -72,7 +72,7 @@ int main() {
   store_ = std::make_shared<RocksDBStore>(name);
 
   std::unique_ptr<inode_cache> i_cache = std::make_unique<inode_cache>(CACHE_SIZE, store_);
-  std::unique_ptr<dentry_cache> d_cache = std::make_unique<dentry_cache>(256);
+  auto *d_cache = new dentry_cache(256);
 
   dir_key root{};
   auto seed = static_cast<uint32_t>(std::rand());
@@ -92,11 +92,12 @@ int main() {
   std::cout << sizeof(kvfs_stat) << std::endl;
   std::cout << root_value.to_string().size() << std::endl;
 
-//  d_cache->insert(root, root_value);
-//  dir_value found;
-//  bool foudn_bool = d_cache->find(root, found);
+  d_cache->insert(root, root_value);
+  d_cache->insert(root, root_value);
+  dir_value found{};
+  auto foudn_bool = d_cache->find(root, found);
 //
-//  std::cout << foudn_bool << std::endl;
+  std::cout << found.to_string() << std::endl;
 
 //  ostringstream op;
 //  convert_to_hex_string(op, reinterpret_cast<const unsigned char *>(&root_value), sizeof(dir_value));
@@ -142,10 +143,13 @@ int main() {
     std::cout << "ERROR" << std::endl;
   }
 
-  i_cache.reset();
+//  d_cache.reset();
+
 
   store_->close();
-
+  std::cout << store_.use_count() << std::endl;
+  delete d_cache;
+  i_cache.reset();
   store_.reset();
   return 0;
 }

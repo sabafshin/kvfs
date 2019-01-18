@@ -32,4 +32,5 @@ target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
     kvfs_rocksdb
+    kvfs_utils
 )

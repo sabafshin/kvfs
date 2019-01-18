@@ -53,16 +53,13 @@ class dentry_cache {
     size_cache_list = lookup.size();
   }
 
-  ~dentry_cache() {
-    delete d_cache_mutex;
-  };
+  ~dentry_cache() = default;
 
  private:
   size_t maxsize;
   CacheList cache;
   CacheMap lookup;
 
-  kvfs::Mutex *d_cache_mutex;
 };
 }  // namespace kvfs
 #endif //KVFS_DIRECTORY_ENTRY_H

@@ -16,6 +16,8 @@
 #include <store/store.hpp>
 #include <store/store_entry.hpp>
 
+#include <rocksdb/utilities/transaction.h>
+#include <rocksdb/utilities/transaction_db.h>
 #include <rocksdb/db.h>
 
 namespace kvfs {
@@ -50,7 +52,7 @@ class RocksDBStore : public Store {
   std::unique_ptr<WriteBatch> beginWrite(size_t buf_size = 0) override;
 
  private:
-  RocksHandles db_handle;
+  std::shared_ptr<RocksHandles> db_handle;
 };
 } //namespace kvfs
 #endif //KVFS_ROCKSDB_STORE_HPP

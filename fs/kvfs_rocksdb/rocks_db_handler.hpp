@@ -14,6 +14,8 @@
 #include <string>
 #include <rocksdb/db.h>
 #include <kvfs_config.hpp>
+#include "rocksdb/utilities/transaction.h"
+#include "rocksdb/utilities/transaction_db.h"
 
 using rocksdb::DB;
 using rocksdb::Options;
@@ -31,7 +33,7 @@ namespace kvfs {
  * required to interact with our local rocksdb store.
  */
 struct RocksHandles {
-  std::unique_ptr<DB> db;
+  std::unique_ptr<rocksdb::TransactionDB> db;
 
   ~RocksHandles();
 
@@ -45,11 +47,8 @@ struct RocksHandles {
   explicit RocksHandles(string dbPath);
 
   RocksHandles(const RocksHandles &) = delete;
-
   RocksHandles &operator=(const RocksHandles &) = delete;
-
   RocksHandles(RocksHandles &&) = default;
-
   RocksHandles &operator=(RocksHandles &&) = default;
 };
 

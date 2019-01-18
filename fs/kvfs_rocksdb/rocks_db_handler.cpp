@@ -8,10 +8,14 @@
  */
 
 #include "rocks_db_handler.hpp"
-
 namespace kvfs {
 
 RocksHandles::~RocksHandles() {
+//  auto status = db->Close();
+//
+//  if (!status.ok()) {
+//    db->SyncWAL();
+//  }
   db.reset();
 }
 
@@ -24,10 +28,10 @@ RocksHandles::RocksHandles(string dbPath) {
   // Create the DB if it's not already present.
   options.create_if_missing = true;
 
-  DB *dbRaw;
+  rocksdb::TransactionDB *dbRaw;
 
   auto status =
-      DB::Open(options, dbPath, &dbRaw);
+      rocksdb::TransactionDB::Open(options, rocksdb::TransactionDBOptions(), dbPath, &dbRaw);
   if (!status.ok()) {
     throw std::runtime_error("Failed to open DB at the given path");
   }

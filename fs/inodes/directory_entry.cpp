@@ -10,7 +10,7 @@
 #include "directory_entry.h"
 
 bool kvfs::dentry_cache::find(kvfs::dir_key &key, kvfs::dir_value &value) {
-  MutexLock l(d_cache_mutex);
+  MutexLock lock;
 
   auto it = lookup.find(key);
   if (it == lookup.end()) {
@@ -26,7 +26,7 @@ bool kvfs::dentry_cache::find(kvfs::dir_key &key, kvfs::dir_value &value) {
   }
 }
 void kvfs::dentry_cache::insert(kvfs::dir_key &key, kvfs::dir_value &value) {
-  MutexLock l(d_cache_mutex);
+  MutexLock lock;
 
   Entry ent(key, value);
   cache.push_front(ent);
@@ -38,8 +38,7 @@ void kvfs::dentry_cache::insert(kvfs::dir_key &key, kvfs::dir_value &value) {
 
 }
 void kvfs::dentry_cache::evict(kvfs::dir_key &key) {
-  MutexLock l(d_cache_mutex);
-
+  MutexLock lock;
   auto it = lookup.find(key);
   if (it != lookup.end()) {
     lookup.erase(it);

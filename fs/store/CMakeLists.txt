@@ -34,4 +34,5 @@ target_link_libraries(
     PRIVATE
     kvfs_rocksdb
     kvfs_inodes
+    kvfs_utils
 )

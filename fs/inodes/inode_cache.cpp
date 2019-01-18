@@ -12,7 +12,7 @@
 namespace kvfs {
 void inode_cache::insert(const data_key &key,
                          const std::string &value) {
-  MutexLock lock(i_cache_mutex);
+  MutexLock lock;
 
   auto handle = inode_cache_handle(key, value, INODE_WRITE);
   Entry entry(key, handle);
@@ -26,7 +26,7 @@ void inode_cache::insert(const data_key &key,
   }
 }
 void inode_cache::insert(const dir_key &key, const std::string &value) {
-  MutexLock lock(i_cache_mutex);
+  MutexLock lock;
 
   auto handle = inode_cache_handle(key, value, INODE_WRITE);
   Entry entry(data_key{key.inode, key.hash, 0}, handle);
@@ -40,7 +40,7 @@ void inode_cache::insert(const dir_key &key, const std::string &value) {
   }
 }
 bool inode_cache::get(const data_key &key, inode_access_mode mode, inode_cache_handle &handle) {
-  MutexLock lock(i_cache_mutex);
+  MutexLock lock;
 
   auto it = lookup.find(key);
   if (it == lookup.end()) {
@@ -59,7 +59,7 @@ bool inode_cache::get(const data_key &key, inode_access_mode mode, inode_cache_h
   return true;
 }
 bool inode_cache::get(const dir_key &key, inode_access_mode mode, inode_cache_handle &handle) {
-  MutexLock lock(i_cache_mutex);
+  MutexLock lock;
 
   auto it = lookup.find(data_key{key.inode, key.hash});
   if (it == lookup.end()) {
@@ -79,9 +79,7 @@ bool inode_cache::get(const dir_key &key, inode_access_mode mode, inode_cache_ha
 }
 
 void inode_cache::clean_inode_handle(inode_cache_handle handle) {
-  Mutex *store_mutex;
-
-  MutexLock lock(store_mutex);
+  MutexLock lock;
   if (handle.access_mode == INODE_WRITE) {
     if (handle.isDir) {
       dir_key dk{handle.inode, handle.hash};
@@ -101,11 +99,10 @@ void inode_cache::clean_inode_handle(inode_cache_handle handle) {
     }
   }
 
-  delete store_mutex;
 }
 
 void inode_cache::evict(const data_key &key) {
-  MutexLock l(i_cache_mutex);
+  MutexLock lock;
 
   auto it = lookup.find(key);
   if (it != lookup.end()) {
@@ -115,7 +112,7 @@ void inode_cache::evict(const data_key &key) {
   }
 }
 void inode_cache::evict(const dir_key &key) {
-  MutexLock l(i_cache_mutex);
+  MutexLock lock;
 
   auto it = lookup.find(data_key{key.inode, key.hash, 0});
   if (it != lookup.end()) {
@@ -125,7 +122,7 @@ void inode_cache::evict(const dir_key &key) {
   }
 }
 void inode_cache::write_back(inode_cache_handle &handle) {
-  MutexLock lock(i_cache_mutex);
+  MutexLock lock;
 
   if (handle.isDir) {
     if (handle.access_mode == INODE_WRITE) {
@@ -150,7 +147,7 @@ void inode_cache::write_back(inode_cache_handle &handle) {
   }
 }
 size_t inode_cache::size() {
-  MutexLock lock(i_cache_mutex);
+  MutexLock lock;
   return cache.size();
 }
 }  // namespace kvfs
