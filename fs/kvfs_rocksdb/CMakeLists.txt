@@ -40,7 +40,6 @@ include_directories ( ${ROCKSDB_SOURCE_DIR}/include )
 set(ROCKSDB_STORE_SRCS
     rocks_db_handler.cpp
     rocks_db_exception.cpp
-    #    rocksdb_mutex.cpp
     rocksdb_hash.cpp
     rocksdb_store.cpp
     )
@@ -50,7 +49,6 @@ source_group("Source Files" FILES ${ROCKSDB_STORE_SRCS})
 set(ROCKSDB_STORE_HEADERS
     rocks_db_handler.hpp
     rocks_db_exception.hpp
-    #    rocksdb_mutex.hpp
     rocksdb_hash.hpp
     rocksdb_store.hpp
     )

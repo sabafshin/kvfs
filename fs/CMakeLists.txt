@@ -9,5 +9,4 @@ add_subdirectory(kvfs_rocksdb)
 add_subdirectory(store)
 add_subdirectory(inodes)
 add_subdirectory(kvfs_utils)
-add_subdirectory(store_test)
-
+add_subdirectory(my_tests)

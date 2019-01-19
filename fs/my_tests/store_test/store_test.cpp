@@ -71,7 +71,7 @@ int main() {
 
   store_ = std::make_shared<RocksDBStore>(name);
 
-  std::unique_ptr<inode_cache> i_cache = std::make_unique<inode_cache>(CACHE_SIZE, store_);
+  std::unique_ptr<inode_cache> i_cache = std::make_unique<inode_cache>(2, store_);
   auto *d_cache = new dentry_cache(256);
 
   dir_key root{};

@@ -18,10 +18,10 @@ include(kvfsConfigChecks)
 
 set(PACKAGE_VERSION "0.1")
 
-#[[include_directories(
-        ${CMAKE_SOURCE_DIR}
-        ${CMAKE_BINARY_DIR}
-)]]
+#include_directories(
+#        ${CMAKE_SOURCE_DIR}
+#        ${CMAKE_BINARY_DIR}
+#)
 
 #include_directories(BEFORE ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -55,82 +55,13 @@ set(ROCKSDB_SOURCE_DIR ${PROJECT_SOURCE_DIR}/third_party/rocksdb)
 
 add_subdirectory(${ROCKSDB_SOURCE_DIR})
 
-include_directories(${ROCKSDB_SOURCE_DIR})
+
 include_directories(${ROCKSDB_SOURCE_DIR}/include)
+include_directories(${ROCKSDB_SOURCE_DIR}/port)
+include_directories(${ROCKSDB_SOURCE_DIR}/util)
+
 ########## RocksDB Config #########################################
-#[[
 
-########## Boost Config ###########################################
-set ( Boost_USE_STATIC_LIBS OFF )
-set ( Boost_USE_MULTITHREADED ON )
-set ( Boost_USE_STATIC_RUNTIME OFF )
-
-find_package ( Boost )
-if ( Boost_FOUND )
-    include_directories ( ${Boost_INCLUDE_DIRS} )
-endif ()
-########## Boost Config ###########################################
-
-########## Folly Config ###########################################
-find_package ( folly )
-if ( folly_FOUND )
-    include_directories ( ${folly_INCLUDE_DIRS} )
-endif ()
-########## Folly Config ###########################################
-
-########### Fuse Config ############################################
-#
-#find_package ( FUSE REQUIRED )
-#if ( FUSE_FOUND )
-#    include_directories ( ${FUSE_INCLUDE_DIRS} )
-#endif ()
-########### Fuse Config ############################################
-]]
-
-#[[
-########## kvfs Config ############################################
-
-set ( HEADERS
-      "${PROJECT_SOURCE_DIR}/include/kvfs/kvfs_wrong.h"
-      include/kvfs/kv_store.hpp include/kvfs/kvfs_wd.hpp
-      include/kvfs/kvfs_ad.h include/use_rocksdb/factory.hpp
-
-      include/store/RocksDBHandles.hpp include/store/RocksDBException.hpp
-      include/store/RocksDBStore.hpp
-
-      include/store/StoreResult.hpp include/utils/properties.hpp include/kvfs/kvfs.hpp
-      include/kvfs/kvfs_state.hpp include/kvfs/inode.hpp include/kvfs/inode_cache.hpp
-      include/kvfs/dentry.hpp include/kvfs/kvfs_def.hpp config/kvfs_config.hpp )
-source_group ( "Header Files" FILES ${HEADERS} )
-
-set ( SOURCES
-      ${PROJECT_SOURCE_DIR}/src/kvfs_wrong.cpp
-      src/kvfs_ad.cpp src/db_functions.cpp
-      src/store/RocksDBHandles.cpp src/store/RocksDBException.cpp
-      src/store/RocksDBStore.cpp src/store/StoreResult.cpp src/utils/Properties.cpp
-      include/kvfs/inode_mutex.hpp src/kvfs/kvfs.cpp src/kvfs/dentry.cpp
-      src/kvfs/inode_cache.cpp src/kvfs/inode_mutex.cpp src/kvfs/kvfs_state.cpp )
-source_group ( "Source Files" FILES ${SOURCES} )
-
-include_directories ( ${PROJECT_SOURCE_DIR}/include )
-
-add_executable ( ${PROJECT_NAME} ${ARTIFACT_SUFFIX}
-                 ${HEADERS}
-                 ${SOURCES}
-                 )
-########## kvfs Config ############################################
-
-target_link_libraries ( ${PROJECT_NAME} ${LIBS} )
-target_link_libraries ( ${PROJECT_NAME} ${SYSTEM_LIBS} )]]
-
-#[[
-add_executable( ${PROJECT_NAME}
-                ${ARTIFACT_SUFFIX}
-                test.cpp)
-
-target_link_libraries ( ${PROJECT_NAME} ${LIBS} )
-target_link_libraries ( ${PROJECT_NAME} ${SYSTEM_LIBS})
-]]
 
 include_directories(${PROJECT_SOURCE_DIR}/config)
 include_directories(${PROJECT_SOURCE_DIR}/fs)

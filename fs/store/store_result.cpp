@@ -11,16 +11,16 @@
 #include "store_result.hpp"
 
 namespace {
-    void freeString(void* /* buffer */, void* userData) {
-        auto str = static_cast<std::string*>(userData);
-        delete str;
-    }
+void freeString(void * /* buffer */, void *userData) {
+  auto str = static_cast<std::string *>(userData);
+  delete str;
+}
 } // namespace
 
 
-namespace kvfs{
-    [[noreturn]] void StoreResult::throwInvalidError() const {
-        // Maybe we should define our own more specific error type in the future
-        throw std::domain_error("value not present in store");
-    }
+namespace kvfs {
+[[noreturn]] void StoreResult::throwInvalidError() const {
+  // Maybe we should define our own more specific error type in the future
+  throw std::domain_error("value not present in store");
 }
+} // namespace kvfs

@@ -15,6 +15,7 @@
 
 #include <store/store.hpp>
 #include <store/store_entry.hpp>
+#include <store/store_result.hpp>
 
 #include <rocksdb/utilities/transaction.h>
 #include <rocksdb/utilities/transaction_db.h>

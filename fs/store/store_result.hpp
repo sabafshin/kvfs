@@ -14,73 +14,73 @@
 #include <stdexcept>
 
 namespace kvfs {
-    class StoreResult {
-    public:
-    public:
-        /**
-         * Construct an invalid StoreResult, representing a key that was not found.
-         */
-        StoreResult() {}
+class StoreResult {
+ public:
+ public:
+  /**
+   * Construct an invalid StoreResult, representing a key that was not found.
+   */
+  StoreResult() : valid_(false) {}
 
-        /**
-         * Construct a StoreResult from a std::string.
-         */
-        explicit StoreResult(std::string&& data)
-                : valid_(true), data_(std::move(data)) {}
+  /**
+   * Construct a StoreResult from a std::string.
+   */
+  explicit StoreResult(std::string &&data)
+      : valid_(true), data_(std::move(data)) {}
 
-        StoreResult(StoreResult&&) = default;
-        StoreResult& operator=(StoreResult&&) = default;
+  StoreResult(StoreResult &&) = default;
+  StoreResult &operator=(StoreResult &&) = default;
 
-        /**
-         * Returns true if the value was found in the store,
-         * or false if the key was not present.
-         */
-        bool isValid() const {
-            return valid_;
-        }
+  /**
+   * Returns true if the value was found in the store,
+   * or false if the key was not present.
+   */
+  bool isValid() const {
+    return valid_;
+  }
 
-        /**
-         * Get a reference to the std::string result.
-         *
-         * Throws std::domain_error if the key was not present in the store.
-         */
-        const std::string& asString() const {
-            ensureValid();
-            return data_;
-        }
+  /**
+   * Get a reference to the std::string result.
+   *
+   * Throws std::domain_error if the key was not present in the store.
+   */
+  const std::string &asString() const {
+    ensureValid();
+    return data_;
+  }
 
-        /**
-          * Extract the std::string contained in this StoreResult.
-          */
-        std::string extractValue() {
-            ensureValid();
-            valid_ = false;
-            return std::move(data_);
-        }
+  /**
+    * Extract the std::string contained in this StoreResult.
+    */
+  std::string extractValue() {
+    ensureValid();
+    valid_ = false;
+    return std::move(data_);
+  }
 
-        /**
-          * Throw an exception if this result is not valid
-          * (i.e., if the key was not present in the store).
-          */
-        void ensureValid() const {
-            if (!isValid()) {
-                throwInvalidError();
-            }
-        }
+  /**
+    * Throw an exception if this result is not valid
+    * (i.e., if the key was not present in the store).
+    */
+  void ensureValid() const {
+    if (!isValid()) {
+      throwInvalidError();
+    }
+  }
 
-    private:
-        // Forbidden copy constructor and assignment operator
-        StoreResult(StoreResult const&) = delete;
-        StoreResult& operator=(StoreResult const&) = delete;
+  // Forbidden copy constructor and assignment operator
+  StoreResult(StoreResult const &) = delete;
+  StoreResult &operator=(StoreResult const &) = delete;
 
-        [[noreturn]] void throwInvalidError() const;
+ private:
+  [[noreturn]] void throwInvalidError() const;
 
-        // Whether or not the result is value
-        // If the key was not found in the store, valid_ will be false.
-        bool valid_{false};
-        // The std::string containing the data
-        std::string data_;
-    };
-}
+  // Whether or not the result is value
+  // If the key was not found in the store, valid_ will be false.
+  bool valid_{false};
+  // The std::string containing the data
+  std::string data_;
+};
+}  // namespace kvfs
 
 #endif //KVFS_STORE_RESULT_HPP

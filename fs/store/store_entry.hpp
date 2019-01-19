@@ -10,7 +10,7 @@
 #ifndef KVFS_STORE_ENTRY_HPP
 #define KVFS_STORE_ENTRY_HPP
 
-#include "store_result.hpp"
+#include <store/store_result.hpp>
 #include <kvfs_config.hpp>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -62,7 +62,7 @@ struct dir_value {
   kvfs_stat fstat;
   char inline_data[KVFS_DEF_BLOCK_SIZE_4K];
 
-  void parse(const StoreResult &s);
+  void parse(const kvfs::StoreResult &s);
 
   std::string to_string() const {
     std::string value;
