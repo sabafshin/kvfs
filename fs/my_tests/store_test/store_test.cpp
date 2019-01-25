@@ -116,7 +116,7 @@ int main() {
   if (status) {
     std::cout << "root insert success." << std::endl;
 
-    bool haskey = store_->hasKey(root_slice);
+    /*bool haskey = store_->hasKey(root_slice);
     assert(haskey);
     StoreResult retrieve = store_->get(root_slice);
     retrieve.ensureValid();
@@ -136,7 +136,7 @@ int main() {
       std::cout << new_back.fstat.st_dev << std::endl;
       std::cout << new_back.fstat.st_ino << std::endl;
 //      std::cout << back.this_inode << std::endl;
-    }
+    }*/
   }
 
   if (!status) {

@@ -19,8 +19,5 @@ void freeString(void * /* buffer */, void *userData) {
 
 
 namespace kvfs {
-[[noreturn]] void StoreResult::throwInvalidError() const {
-  // Maybe we should define our own more specific error type in the future
-  throw std::domain_error("value not present in store");
-}
+
 } // namespace kvfs

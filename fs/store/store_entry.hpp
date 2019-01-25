@@ -62,7 +62,14 @@ struct dir_value {
   kvfs_stat fstat;
   char inline_data[KVFS_DEF_BLOCK_SIZE_4K];
 
-  void parse(const kvfs::StoreResult &s);
+  void parse(const kvfs::StoreResult &result) {
+    auto bytes = result.asString();
+    if (bytes.size() != sizeof(dir_value)) {
+      throw std::invalid_argument("Bad size");
+    }
+    auto *idx = bytes.data();
+    memmove(this, idx, sizeof(dir_value));
+  }
 
   std::string to_string() const {
     std::string value;

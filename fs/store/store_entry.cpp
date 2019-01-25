@@ -10,12 +10,5 @@
 #include "store_entry.hpp"
 
 namespace kvfs {
-void dir_value::parse(const kvfs::StoreResult &result) {
-  auto bytes = result.asString();
-  if (bytes.size() != sizeof(dir_value)) {
-    throw std::invalid_argument("Bad size");
-  }
-  auto *idx = bytes.data();
-  memmove(this, idx, sizeof(dir_value));
-}
+
 }  // namespace kvfs
