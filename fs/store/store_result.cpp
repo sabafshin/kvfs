@@ -8,7 +8,7 @@
  */
 
 
-#include "store_result.hpp"
+#include "store_result.h"
 
 namespace {
 void freeString(void * /* buffer */, void *userData) {
@@ -16,8 +16,3 @@ void freeString(void * /* buffer */, void *userData) {
   delete str;
 }
 } // namespace
-
-
-namespace kvfs {
-
-} // namespace kvfs

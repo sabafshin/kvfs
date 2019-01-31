@@ -10,10 +10,11 @@
 #ifndef KVFS_STORE_ENTRY_HPP
 #define KVFS_STORE_ENTRY_HPP
 
-#include <store/store_result.hpp>
+#include <store/store_result.h>
 #include <kvfs_config.hpp>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <dirent.h>
 #include <cstring>
 
 namespace kvfs {
@@ -25,55 +26,44 @@ typedef uint32_t kvfs_file_hash_t;
 typedef uint64_t kvfs_file_block_number_t;
 
 #ifdef __USE_LARGEFILE64
+typedef struct dirent64 kvfs_dirent;
 typedef struct stat64 kvfs_stat;
 typedef ino64_t kvfs_file_inode_t;
 #else
+typedef struct dirent kvfs_dirent;
 typedef ino_t kvfs_file_inode_t;
 typedef struct stat kvfs_stat;
 #endif
 
-struct data_key {
-  kvfs_file_inode_t inode;
-  kvfs_file_hash_t hash;
-  kvfs_file_block_number_t block_number;
+struct StoreEntryKey {
+  kvfs_file_inode_t inode_;
+  kvfs_file_hash_t hash_;
+  kvfs_file_block_number_t block_number_;
 
   std::string to_string() const {
-    std::string value;
-    return value.append(reinterpret_cast<const char *>(this), sizeof(data_key));
+    std::string bytes_;
+    return bytes_.append(reinterpret_cast<const char *>(this), sizeof(StoreEntryKey));
   }
 };
 
-struct dir_key {
-  kvfs_file_inode_t inode;
-  kvfs_file_hash_t hash;
-
-  std::string to_string() const {
-    std::string value;
-    return value.append(reinterpret_cast<const char *>(this), sizeof(dir_key));
-  };
-};
-
-struct dir_value {
-  char name[KVFS_NAME_LEN + 1];
-  kvfs_file_inode_t this_inode;
-  kvfs_file_hash_t parent_hash;
-  uint64_t hardlink_count;
-  struct data_key blocks_ptr;
-  kvfs_stat fstat;
+struct StoreEntryValue {
+  kvfs_dirent dirent_;
+  kvfs_file_hash_t parent_hash_;
+  kvfs_stat fstat_;
   char inline_data[KVFS_DEF_BLOCK_SIZE_4K];
 
   void parse(const kvfs::StoreResult &result) {
     auto bytes = result.asString();
-    if (bytes.size() != sizeof(dir_value)) {
+    if (bytes.size() != sizeof(StoreEntryValue)) {
       throw std::invalid_argument("Bad size");
     }
     auto *idx = bytes.data();
-    memmove(this, idx, sizeof(dir_value));
+    memmove(this, idx, sizeof(StoreEntryValue));
   }
 
   std::string to_string() const {
-    std::string value;
-    return value.append(reinterpret_cast<const char *>(this), sizeof(dir_value));
+    std::string bytes_;
+    return bytes_.append(reinterpret_cast<const char *>(this), sizeof(StoreEntryValue));
   }
 };
 

@@ -7,7 +7,7 @@
  *      File:   rocksdb_store.cpp
  */
 
-#include "rocksdb_store.hpp"
+#include "rocksdb_store.h"
 
 using std::vector;
 
@@ -62,8 +62,9 @@ vector<StoreResult> RocksDBStore::get_children(const std::string &key) {
 
   auto val = get(key);
   if (val.isValid()) {
-    const auto *dirValue = reinterpret_cast<const dir_value *>(val.asString().data());
-    kvfs_file_inode_t prefix = dirValue->this_inode;
+    StoreEntryValue dirValue;
+    dirValue.parse(val);
+    kvfs_file_inode_t prefix = dirValue.dirent_.d_ino;
     vector<StoreResult> result;
     auto iter = db_handle->db->NewIterator(ReadOptions());
 
@@ -84,13 +85,13 @@ StoreResult RocksDBStore::get_parent(const std::string &key) {
   auto val = get(key);
 
   if (val.isValid()) {
-    dir_value dv{};
+    StoreEntryValue dv{};
     dv.parse(val);
-    kvfs_file_inode_t inode = dv.this_inode - 1;
+    kvfs_file_inode_t inode = dv.dirent_.d_ino - 1;
 
     if (inode >= 0) {
-      kvfs_file_hash_t hash = dv.parent_hash;
-      dir_key parent_key{inode, hash};
+      kvfs_file_hash_t hash = dv.parent_hash_;
+      StoreEntryKey parent_key{inode, hash};
       auto parent = get(parent_key.to_string());
       if (parent.isValid()) {
         return parent;

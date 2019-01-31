@@ -7,7 +7,7 @@
  *      File:   rocksdb_hash.cpp
  */
 
-#include "rocksdb_hash.hpp"
+#include "rocksdb_hash.h"
 
 namespace kvfs {
 unsigned int XXH32(const void *input, int len, unsigned int seed) {

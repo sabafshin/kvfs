@@ -7,10 +7,10 @@
  *      File:   store_test.cpp
  */
 
-#include <kvfs_rocksdb/rocksdb_store.hpp>
-#include <kvfs_rocksdb/rocksdb_hash.hpp>
+#include <kvfs_rocksdb/rocksdb_store.h>
+#include <kvfs_rocksdb/rocksdb_hash.h>
 #include <inodes/inode_cache.h>
-#include <inodes/directory_entry.h>
+#include <inodes/directory_entry_cache.h>
 #include <iostream>
 #include <random>
 #include <iomanip>
@@ -66,26 +66,30 @@ void convert_to_struct(istream& ip, unsigned char* data,
 }*/
 
 int main() {
-  const char *name = "/tmp/db/";
+  string name = "/tmp/db/";
   std::shared_ptr<Store> store_;
 
   store_ = std::make_shared<RocksDBStore>(name);
 
-  std::unique_ptr<inode_cache> i_cache = std::make_unique<inode_cache>(2, store_);
-  auto *d_cache = new dentry_cache(256);
+//  std::unique_ptr<inode_cache> i_cache = std::make_unique<inode_cache>(2, store_);
+  auto *d_cache = new DentryCache(256);
 
-  dir_key root{};
+  StoreEntryKey root{};
   auto seed = static_cast<uint32_t>(std::rand());
-  root.inode = 0;
-  root.hash = kvfs::XXH32(name, static_cast<int>(strlen(name)), seed);
+  root.inode_ = 0;
+  root.hash_ = kvfs::XXH32(name.data(), static_cast<int>(name.size()), seed);
 
-  std::cout << root.hash << std::endl;
+  std::cout << root.hash_ << std::endl;
 
-  dir_value root_value{"/tmp/db/"};
+  StoreEntryValue root_value;
 
-  root_value.this_inode = 0;
-  root_value.parent_hash = root.hash;
-  root_value.fstat = {
+  for (int i = 0; i < name.size(); ++i) {
+    root_value.dirent_.d_name[i] = name[i];
+  }
+
+  root_value.fstat_.st_ino = 0;
+  root_value.parent_hash_ = root.hash_;
+  root_value.fstat_ = {
       1, 20, 3, 45, 0
   };
 
@@ -94,21 +98,21 @@ int main() {
 
   d_cache->insert(root, root_value);
   d_cache->insert(root, root_value);
-  dir_value found{};
+  StoreEntryValue found{};
   auto foudn_bool = d_cache->find(root, found);
 //
   std::cout << found.to_string() << std::endl;
 
 //  ostringstream op;
-//  convert_to_hex_string(op, reinterpret_cast<const unsigned char *>(&root_value), sizeof(dir_value));
+//  convert_to_hex_string(op, reinterpret_cast<const unsigned char *>(&root_value), sizeof(StoreEntryValue));
 //  string output = op.str();
 //  cout << "After conversion from struct to hex string:\n"
 //       << output << endl;
   auto root_slice = root.to_string();
   auto root_value_slice = root_value.to_string();
 //  istringstream ip(root_value_slice.data());
-//  dir_value back{};
-//  convert_to_struct(ip, reinterpret_cast<unsigned char*>(&back), sizeof(dir_value));
+//  StoreEntryValue back{};
+//  convert_to_struct(ip, reinterpret_cast<unsigned char*>(&back), sizeof(StoreEntryValue));
   std::cout << root_value_slice.data() << std::endl;
   std::cout << root_value.to_string() << std::endl;
   bool status = store_->put(root.to_string(), root_value.to_string());
@@ -116,27 +120,27 @@ int main() {
   if (status) {
     std::cout << "root insert success." << std::endl;
 
-    /*bool haskey = store_->hasKey(root_slice);
+    bool haskey = store_->hasKey(root_slice);
     assert(haskey);
     StoreResult retrieve = store_->get(root_slice);
     retrieve.ensureValid();
     if (retrieve.isValid()) {
       std::cout << "root retrieve success." << std::endl;
 //      delete name;
-//      const auto *back = reinterpret_cast<const dir_value *>(retrieve.asString().data());
+//      const auto *back = reinterpret_cast<const StoreEntryValue *>(retrieve.asString().data());
       string output = retrieve.asString();
       std::cout << output << std::endl;
 //      istringstream ip(output);
-      dir_value new_back{};
+      StoreEntryValue new_back{};
       new_back.parse(retrieve);
-//      convert_to_struct(ip, reinterpret_cast<unsigned char*>(&new_back), sizeof(dir_value));
-      std::cout << new_back.name << std::endl;
-      std::cout << new_back.this_inode << std::endl;
-      std::cout << new_back.parent_hash << std::endl;
-      std::cout << new_back.fstat.st_dev << std::endl;
-      std::cout << new_back.fstat.st_ino << std::endl;
+//      convert_to_struct(ip, reinterpret_cast<unsigned char*>(&new_back), sizeof(StoreEntryValue));
+      std::cout << new_back.dirent_.d_name << std::endl;
+      std::cout << new_back.fstat_.st_ino << std::endl;
+      std::cout << new_back.parent_hash_ << std::endl;
+      std::cout << new_back.fstat_.st_dev << std::endl;
+      std::cout << new_back.fstat_.st_ino << std::endl;
 //      std::cout << back.this_inode << std::endl;
-    }*/
+    }
   }
 
   if (!status) {
@@ -147,9 +151,9 @@ int main() {
 
 
   store_->close();
-  std::cout << store_.use_count() << std::endl;
+//  std::cout << store_.use_count() << std::endl;
   delete d_cache;
-  i_cache.reset();
+//  i_cache.reset();
   store_.reset();
   return 0;
 }

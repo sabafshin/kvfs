@@ -10,12 +10,12 @@
 #ifndef KVFS_ROCKSDB_STORE_HPP
 #define KVFS_ROCKSDB_STORE_HPP
 
-#include "rocks_db_handler.hpp"
-#include "rocks_db_exception.hpp"
+#include "rocks_db_handler.h"
+#include "rocks_db_exception.h"
 
-#include <store/store.hpp>
-#include <store/store_entry.hpp>
-#include <store/store_result.hpp>
+#include <store/store.h>
+#include <store/store_entry.h>
+#include <store/store_result.h>
 
 #include <rocksdb/utilities/transaction.h>
 #include <rocksdb/utilities/transaction_db.h>

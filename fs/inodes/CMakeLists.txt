@@ -10,14 +10,14 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 
 set(INODES_SRCS
     inode_cache.cpp
-    directory_entry.cpp
+    directory_entry_cache.cpp
     )
 
 source_group("Source Files" FILES ${INODES_SRCS})
 
 set(INODES_HEADERS
     inode_cache.h
-    directory_entry.h
+    directory_entry_cache.h
     )
 
 source_group("Header Files" FILES ${INODES_HEADERS})

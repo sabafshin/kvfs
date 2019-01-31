@@ -7,7 +7,7 @@
  *      File:   rocks_db_exception.cpp
  */
 
-#include "rocks_db_exception.hpp"
+#include "rocks_db_exception.h"
 
 namespace kvfs {
 RocksException::RocksException(

@@ -14,8 +14,8 @@
 #include <vector>
 #include <string>
 
-#include "store_entry.hpp"
-#include "store_result.hpp"
+#include "store_entry.h"
+#include "store_result.h"
 
 namespace kvfs {
 

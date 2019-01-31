@@ -10,16 +10,15 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 
 set(STORE_SRCS
     store.cpp
-    store_entry.cpp
     store_result.cpp
     )
 
 source_group("Source Files" FILES ${STORE_SRCS})
 
 set(STORE_HEADERS
-    store.hpp
-    store_entry.hpp
-    store_result.hpp
+    store.h
+    store_entry.h
+    store_result.h
     store_hash.h)
 
 source_group(" Header Files " FILES ${STORE_HEADERS})
@@ -29,10 +28,10 @@ add_library(
     ${STORE_SRCS}
     ${STORE_HEADERS})
 
-#[[target_link_libraries(
+target_link_libraries(
     ${PROJECT_NAME}
-    PUBLIC
+    PRIVATE
     kvfs_rocksdb
     kvfs_inodes
     kvfs_utils
-)]]
+)

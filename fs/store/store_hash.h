@@ -10,7 +10,7 @@
 #ifndef KVFS_STORE_HASH_H
 #define KVFS_STORE_HASH_H
 
-#include <kvfs_rocksdb/rocksdb_hash.hpp>
+#include <kvfs_rocksdb/rocksdb_hash.h>
 
 namespace kvfs {
 // Simple Hash functions

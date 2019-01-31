@@ -18,17 +18,12 @@ include(kvfsConfigChecks)
 
 set(PACKAGE_VERSION "0.1")
 
-#include_directories(
-#        ${CMAKE_SOURCE_DIR}
-#        ${CMAKE_BINARY_DIR}
-#)
-
-#include_directories(BEFORE ${CMAKE_CURRENT_BINARY_DIR})
-
 configure_file(
     ${PROJECT_SOURCE_DIR}/CMake/kvfs-config.h.in
     config/kvfs_config.hpp
 )
+
+########## RocksDB Config #########################################
 
 #### Disable RocksDB test build ##########
 option(WITH_GFLAGS "build with GFlags" OFF)
@@ -38,7 +33,6 @@ option(WITH_TESTS "build with tests" OFF)
 option(WITH_TOOLS "build with tools" OFF)
 ##########################################
 
-########## RocksDB Config #########################################
 set(ROCKSDB_STATIC_LIB rocksdb${ARTIFACT_SUFFIX})
 set(ROCKSDB_SHARED_LIB rocksdb-shared${ARTIFACT_SUFFIX})
 set(ROCKSDB_IMPORT_LIB ${ROCKSDB_SHARED_LIB})
@@ -55,14 +49,37 @@ set(ROCKSDB_SOURCE_DIR ${PROJECT_SOURCE_DIR}/third_party/rocksdb)
 
 add_subdirectory(${ROCKSDB_SOURCE_DIR})
 
-
 include_directories(${ROCKSDB_SOURCE_DIR}/include)
-include_directories(${ROCKSDB_SOURCE_DIR}/port)
 include_directories(${ROCKSDB_SOURCE_DIR}/util)
 
 ########## RocksDB Config #########################################
 
-
 include_directories(${PROJECT_SOURCE_DIR}/config)
 include_directories(${PROJECT_SOURCE_DIR}/fs)
 add_subdirectory(${PROJECT_SOURCE_DIR}/fs)
+
+include_directories(${PROJECT_SOURCE_DIR}/include)
+set(
+    KVFS_SRCS
+    fs/kvfs.cpp
+)
+source_group("Source Files" FILES ${KVFS_SRCS})
+
+set(
+    KVFS_HEADERS
+    include/kvfs/kvfs.h
+    include/kvfs/fs.h
+)
+source_group("Header Files" FILES ${KVFS_HEADERS})
+
+add_library(
+    ${PROJECT_NAME} SHARED
+    ${KVFS_SRCS}
+    ${KVFS_HEADERS}
+)
+
+target_link_libraries(
+    ${PROJECT_NAME}
+    PRIVATE
+    kvfs_store
+)

@@ -47,10 +47,10 @@ set(ROCKSDB_STORE_SRCS
 source_group("Source Files" FILES ${ROCKSDB_STORE_SRCS})
 
 set(ROCKSDB_STORE_HEADERS
-    rocks_db_handler.hpp
-    rocks_db_exception.hpp
-    rocksdb_hash.hpp
-    rocksdb_store.hpp
+    rocks_db_handler.h
+    rocks_db_exception.h
+    rocksdb_hash.h
+    rocksdb_store.h
     )
 
 source_group(" Header Files " FILES ${ROCKSDB_STORE_HEADERS})

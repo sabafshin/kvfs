@@ -4,150 +4,82 @@
  * license that can be found in the LICENSE file.
  *
  *      Author: Afshin Sabahi
- *      File:   inode_cache.cpp
+ *      File:   InodeCache.cpp
  */
 
 #include "inode_cache.h"
 
 namespace kvfs {
-void inode_cache::insert(const data_key &key,
-                         const std::string &value) {
+void InodeCache::insert(const StoreEntryKey &key,
+                        const std::string &value) {
   MutexLock lock;
 
-  auto handle = inode_cache_handle(key, value, INODE_WRITE);
+  auto handle = InodeCacheEntry(key, value, INODE_WRITE);
   Entry entry(key, handle);
-  cache.push_front(entry);
-  lookup[key] = cache.begin();
-  if (cache.size() > max_size) {
-    auto handle = cache.back().second;
+  cache_list_.push_front(entry);
+  cache_map_lookup_[key] = cache_list_.begin();
+  if (cache_list_.size() > max_size_) {
+    auto handle = cache_list_.back().second;
     clean_inode_handle(handle);
-    lookup.erase(cache.back().first);
-    cache.pop_back();
+    cache_map_lookup_.erase(cache_list_.back().first);
+    cache_list_.pop_back();
   }
 }
-void inode_cache::insert(const dir_key &key, const std::string &value) {
+
+bool InodeCache::get(const StoreEntryKey &key, InodeAccessMode mode, InodeCacheEntry &handle) {
   MutexLock lock;
 
-  auto handle = inode_cache_handle(key, value, INODE_WRITE);
-  Entry entry(data_key{key.inode, key.hash, 0}, handle);
-  cache.push_front(entry);
-  lookup[entry.first] = cache.begin();
-  if (cache.size() > max_size) {
-    auto handle = cache.back().second;
-    clean_inode_handle(handle);
-    lookup.erase(cache.back().first);
-    cache.pop_back();
-  }
-}
-bool inode_cache::get(const data_key &key, inode_access_mode mode, inode_cache_handle &handle) {
-  MutexLock lock;
-
-  auto it = lookup.find(key);
-  if (it == lookup.end()) {
+  auto it = cache_map_lookup_.find(key);
+  if (it == cache_map_lookup_.end()) {
     StoreResult sr = store_->get(key.to_string());
     if (sr.isValid()) {
-      handle = inode_cache_handle(key, sr.asString(), mode);
+      handle = InodeCacheEntry(key, sr.asString(), mode);
       this->insert(key, sr.asString());
       return true;
     }
   }
   handle = it->second->second;
-  cache.push_front(*(it->second));
-  cache.erase(it->second);
-  lookup[key] = cache.begin();
-
-  return true;
-}
-bool inode_cache::get(const dir_key &key, inode_access_mode mode, inode_cache_handle &handle) {
-  MutexLock lock;
-
-  auto it = lookup.find(data_key{key.inode, key.hash});
-  if (it == lookup.end()) {
-    StoreResult sr = store_->get(key.to_string());
-    if (sr.isValid()) {
-      handle = inode_cache_handle(key, sr.asString(), mode);
-      this->insert(key, sr.asString());
-      return true;
-    }
-  }
-  handle = it->second->second;
-  cache.push_front(*(it->second));
-  cache.erase(it->second);
-  lookup[it->second->first] = cache.begin();
+  cache_list_.push_front(*(it->second));
+  cache_list_.erase(it->second);
+  cache_map_lookup_[key] = cache_list_.begin();
 
   return true;
 }
 
-void inode_cache::clean_inode_handle(inode_cache_handle handle) {
+void InodeCache::clean_inode_handle(InodeCacheEntry handle) {
   MutexLock lock;
+
   if (handle.access_mode == INODE_WRITE) {
-    if (handle.isDir) {
-      dir_key dk{handle.inode, handle.hash};
-      store_->put(dk.to_string(), handle.value);
-    } else {
-      data_key dk{handle.inode, handle.hash, handle.blockN};
-      store_->put(dk.to_string(), handle.value);
-    }
+    store_->put(handle.key_.to_string(), handle.value_);
   }
   if (handle.access_mode == INODE_DELETE) {
-    if (handle.isDir) {
-      dir_key dk{handle.inode, handle.hash};
-      store_->put(dk.to_string(), handle.value);
-    } else {
-      data_key dk{handle.inode, handle.hash, handle.blockN};
-      store_->put(dk.to_string(), handle.value);
-    }
+    store_->put(handle.key_.to_string(), handle.value_);
   }
-
 }
 
-void inode_cache::evict(const data_key &key) {
+void InodeCache::evict(const StoreEntryKey &key) {
   MutexLock lock;
 
-  auto it = lookup.find(key);
-  if (it != lookup.end()) {
+  auto it = cache_map_lookup_.find(key);
+  if (it != cache_map_lookup_.end()) {
     auto handle = it->second->second;
     clean_inode_handle(handle);
-    lookup.erase(it);
+    cache_map_lookup_.erase(it);
   }
 }
-void inode_cache::evict(const dir_key &key) {
-  MutexLock lock;
 
-  auto it = lookup.find(data_key{key.inode, key.hash, 0});
-  if (it != lookup.end()) {
-    auto handle = it->second->second;
-    clean_inode_handle(handle);
-    lookup.erase(it);
+void InodeCache::write_back(InodeCacheEntry &handle) {
+  MutexLock lock;
+  if (handle.access_mode == INODE_WRITE) {
+    store_->put(handle.key_.to_string(), handle.value_);
+    handle.access_mode = INODE_READ;
+  } else if (handle.access_mode == INODE_DELETE) {
+    store_->put(handle.key_.to_string(), handle.value_);
+    this->evict(handle.key_);
   }
 }
-void inode_cache::write_back(inode_cache_handle &handle) {
+size_t InodeCache::size() {
   MutexLock lock;
-
-  if (handle.isDir) {
-    if (handle.access_mode == INODE_WRITE) {
-      dir_key dk{handle.inode, handle.hash};
-      store_->put(dk.to_string(), handle.value);
-      handle.access_mode = INODE_READ;
-    } else if (handle.access_mode == INODE_DELETE) {
-      dir_key dk{handle.inode, handle.hash};
-      store_->put(dk.to_string(), handle.value);
-      this->evict(dk);
-    }
-  } else {
-    if (handle.access_mode == INODE_WRITE) {
-      data_key dk{handle.inode, handle.hash, handle.blockN};
-      store_->put(dk.to_string(), handle.value);
-      handle.access_mode = INODE_READ;
-    } else if (handle.access_mode == INODE_DELETE) {
-      data_key dk{handle.inode, handle.hash, handle.blockN};
-      store_->put(dk.to_string(), handle.value);
-      this->evict(dk);
-    }
-  }
-}
-size_t inode_cache::size() {
-  MutexLock lock;
-  return cache.size();
+  return cache_list_.size();
 }
 }  // namespace kvfs

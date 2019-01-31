@@ -6,14 +6,14 @@
  * license that can be found in the LICENSE file.
  *
  *      Author: Afshin Sabahi
- *      File:   inode_cache.h
+ *      File:   InodeCache.h
  */
 
 #ifndef KVFS_INODE_CACHE_H
 #define KVFS_INODE_CACHE_H
 
-#include <store/store.hpp>
-#include <store/store_entry.hpp>
+#include <store/store.h>
+#include <store/store_entry.h>
 #include <kvfs_utils/mutex.h>
 #include <kvfs_utils/mutex_lock.h>
 #include <memory>
@@ -23,83 +23,75 @@
 
 namespace kvfs {
 
-enum inode_access_mode : uint8_t {
+enum InodeAccessMode : uint8_t {
   INODE_READ = 0,
   INODE_DELETE = 1,
   INODE_WRITE = 2,
 };
 
-enum inode_state : uint8_t {
+enum InodeState : uint8_t {
   CLEAN = 0,
   DELETED = 1,
   DIRTY = 2,
 };
 
-struct inode_cache_handle {
-  kvfs_file_inode_t inode;
-  kvfs_file_hash_t hash;
-  kvfs_file_block_number_t blockN;
-  bool isDir;
-  std::string value;
-  inode_state state;
-  inode_access_mode access_mode;
+struct InodeCacheEntry {
+  StoreEntryKey key_;
+  std::string value_;
+  InodeState state;
+  InodeAccessMode access_mode;
 
-  inode_cache_handle(const dir_key &key, std::string value, inode_access_mode mode)
-      : inode(key.inode), hash(key.hash), value(std::move(value)), access_mode(mode), isDir(true) {}
-  inode_cache_handle(const data_key &key, std::string value, inode_access_mode mode)
-      : inode(key.inode), hash(key.hash), value(std::move(value)), access_mode(mode), isDir(false) {}
-  inode_cache_handle() : access_mode(INODE_READ) {}
+  InodeCacheEntry(const StoreEntryKey &key, std::string value, InodeAccessMode mode)
+      : key_(key), value_(std::move(value)), access_mode(mode) {}
+  InodeCacheEntry() : access_mode(INODE_READ) {}
 };
 
-struct cache_comp {
-  bool operator()(const data_key &lhs, const data_key &rhs) const {
-    return (lhs.hash == rhs.hash) && (lhs.inode == rhs.inode) && (lhs.block_number == rhs.block_number);
+struct InodeCacheComparator {
+  bool operator()(const StoreEntryKey &lhs, const StoreEntryKey &rhs) const {
+    return (lhs.hash_ == rhs.hash_) && (lhs.inode_ == rhs.inode_) && (lhs.block_number_ == rhs.block_number_);
   }
 };
 
-struct cache_hash {
-  std::size_t operator()(const data_key &x) const {
+struct InodeCacheHash {
+  std::size_t operator()(const StoreEntryKey &x) const {
     std::size_t seed = 0;
-    seed ^= x.inode + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    seed ^= x.hash + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    seed ^= x.block_number + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    seed ^= x.inode_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    seed ^= x.hash_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    seed ^= x.block_number_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     return seed;
   }
 };
 
-class inode_cache {
+class InodeCache {
  public:
-  typedef std::pair<data_key, inode_cache_handle> Entry;
+  typedef std::pair<StoreEntryKey, InodeCacheEntry> Entry;
   typedef std::list<Entry> CacheList;
-  typedef std::unordered_map<data_key, std::list<Entry>::iterator,
-                             cache_hash, cache_comp> CacheMap;
+  typedef std::unordered_map<StoreEntryKey, std::list<Entry>::iterator,
+                             InodeCacheHash, InodeCacheComparator> CacheMap;
 
-  explicit inode_cache(size_t size, const std::shared_ptr<Store> store)
-      : max_size(size), store_(store) {}
+  explicit InodeCache(size_t size, const std::shared_ptr<Store> store)
+      : max_size_(size), store_(store) {}
 
-  void insert(const data_key &key, const std::string &value);
-  void insert(const dir_key &key, const std::string &value);
+  void insert(const StoreEntryKey &key, const std::string &value);
 
-  bool get(const data_key &key, inode_access_mode mode, inode_cache_handle &handle);
-  bool get(const dir_key &key, inode_access_mode mode, inode_cache_handle &handle);
+  bool get(const StoreEntryKey &key, InodeAccessMode mode, InodeCacheEntry &handle);
 
-  void write_back(inode_cache_handle &key);
+  void write_back(InodeCacheEntry &key);
 
-  void evict(const data_key &key);
-  void evict(const dir_key &key);
+  void evict(const StoreEntryKey &key);
 
   size_t size();
 
-  ~inode_cache() = default;
+  ~InodeCache() = default;
 
  private:
-  CacheList cache;
-  CacheMap lookup;
-  size_t max_size;
+  CacheList cache_list_;
+  CacheMap cache_map_lookup_;
+  size_t max_size_;
 
   std::shared_ptr<Store> store_;
 
-  void clean_inode_handle(inode_cache_handle handle);
+  void clean_inode_handle(InodeCacheEntry handle);
 };
 
 }  // namespace kvfs
