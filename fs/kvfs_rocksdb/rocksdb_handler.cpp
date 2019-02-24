@@ -7,7 +7,7 @@
  *      File:   rocks_db_handler.cpp
  */
 
-#include "rocks_db_handler.h"
+#include "rocksdb_handler.h"
 namespace kvfs {
 
 RocksHandles::~RocksHandles() {

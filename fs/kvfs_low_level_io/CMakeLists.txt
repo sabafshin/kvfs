@@ -2,36 +2,30 @@
 ## Use of this source code is governed by a BSD-style
 ## license that can be found in the LICENSE file.
 
+# CMakeList.txt : Top-level CMake project file, do global configuration
+# and include sub-projects here.
+#
 cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
 set(CMAKE_CXX_STANDARD 17)
 
-set(PROJECT_NAME "kvfs_store")
+set(PROJECT_NAME "kvfs_low_level_io")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
-set(STORE_SRCS
-    store.cpp
-    store_result.cpp
+set(LOW_LEVEL_SRCS
     )
+source_group("Source Files" FILES ${LOW_LEVEL_SRCS})
 
-source_group("Source Files" FILES ${STORE_SRCS})
-
-set(STORE_HEADERS
-    store.h
-    store_entry.h
-    store_result.h
-    store_hash.h ../kvfs/super.h)
-
-source_group(" Header Files " FILES ${STORE_HEADERS})
+set(LOW_LEVEL_HEADERS
+    )
+source_group(" Header Files " FILES ${LOW_LEVEL_HEADERS})
 
 add_library(
     ${PROJECT_NAME} SHARED
-    ${STORE_SRCS}
-    ${STORE_HEADERS})
+    ${LOW_LEVEL_SRCS}
+    ${LOW_LEVEL_HEADERS})
 
 target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
-    kvfs_rocksdb
-    kvfs_inodes
-    kvfs_utils
+    kvfs_store
 )

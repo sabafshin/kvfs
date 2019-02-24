@@ -38,8 +38,8 @@ include_directories ( ${ROCKSDB_SOURCE_DIR}/include )
 ########## RocksDB Config #########################################]]
 
 set(ROCKSDB_STORE_SRCS
-    rocks_db_handler.cpp
-    rocks_db_exception.cpp
+    rocksdb_handler.cpp
+    rocksdb_exception.cpp
     rocksdb_hash.cpp
     rocksdb_store.cpp
     )
@@ -47,8 +47,8 @@ set(ROCKSDB_STORE_SRCS
 source_group("Source Files" FILES ${ROCKSDB_STORE_SRCS})
 
 set(ROCKSDB_STORE_HEADERS
-    rocks_db_handler.h
-    rocks_db_exception.h
+    rocksdb_handler.h
+    rocksdb_exception.h
     rocksdb_hash.h
     rocksdb_store.h
     )

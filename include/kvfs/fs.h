@@ -25,8 +25,7 @@
 class FS {
  public:
 
-  FS() : root_path_("tmp/db/") {};
-  explicit FS(std::string mount_path) : root_path_(std::move(mount_path)) {};
+  FS() = default;
   ~FS() = default;
 
   /*############## POSIX Operations ##############*/
@@ -81,10 +80,10 @@ class FS {
   /**
     * @brief The opendir function opens and returns a directory stream for reading the directory
     * whose file name is dirname. The stream has type DIR *.
-    * @param dirname file name
+    * @param path file name
     * @return If unsuccessful, opendir returns a null pointer.
     */
-  virtual DIR *OpenDir(const char *dirname) = 0;
+  virtual DIR *OpenDir(const char *path) = 0;
 
   /**
    * This function reads the next entry from the directory.
@@ -427,8 +426,264 @@ class FS {
    */
   virtual void TuneFS() = 0;
 
- protected:
-  const std::string root_path_;
+  /**
+   * The open function creates and returns a new file descriptor for the file named by filename.
+   * Initially, the file position indicator for the file is at the beginning of the file.
+   * @param filename
+   * @param flags The flags argument controls how the file is to be opened.
+   * This is a bit mask; you create the value by the bitwise OR of the appropriate parameters (using the ‘|’ operator in C).
+   * @return The normal return value from open is a non-negative integer file descriptor.
+   * In the case of an error, a value of -1 is returned instead. In addition to the usual file name errors,
+   * the following errno error conditions are defined for this function:
+   *
+EACCES
+
+    The file exists but is not readable/writable as requested by the flags argument, or the file does not exist and the directory is unwritable so it cannot be created.
+EEXIST
+
+    Both O_CREAT and O_EXCL are set, and the named file already exists.
+EINTR
+
+    The open operation was interrupted by a signal. See Interrupted Primitives.
+EISDIR
+
+    The flags argument specified write access, and the file is a directory.
+EMFILE
+
+    The process has too many files open. The maximum number of file descriptors is controlled by the RLIMIT_NOFILE resource limit; see Limits on Resources.
+ENFILE
+
+    The entire system, or perhaps the file system which contains the directory, cannot support any additional open files at the moment. (This problem cannot happen on GNU/Hurd systems.)
+ENOENT
+
+    The named file does not exist, and O_CREAT is not specified.
+ENOSPC
+
+    The directory or file system that would contain the new file cannot be extended, because there is no disk space left.
+ENXIO
+
+    O_NONBLOCK and O_WRONLY are both set in the flags argument, the file named by filename is a FIFO (see Pipes and FIFOs), and no process has the file open for reading.
+EROFS
+
+    The file resides on a read-only file system and any of O_WRONLY, O_RDWR, and O_TRUNC are set in the flags argument, or O_CREAT is set and the file does not already exist.
+
+   */
+  virtual int Open(const char *filename, int flags, mode_t mode) = 0;
+
+  /**
+   * The function close closes the file descriptor filedes. Closing a file has the following consequences:
+
+    The file descriptor is deallocated.
+    Any record locks owned by the process on the file are unlocked.
+    When all file descriptors associated with a pipe or FIFO have been closed, any unread data is discarded.
+    This function is a cancellation point in multi-threaded programs. This is a problem if the thread allocates some resources (like memory, file descriptors, semaphores or whatever) at the time close is called. If the thread gets canceled these resources stay allocated until the program ends. To avoid this, calls to close should be protected using cancellation handlers.
+   * @param filedes
+   * @return The normal return value from close is 0; a value of -1 is returned in case of failure. The following errno error conditions are defined for this function:
+
+EBADF
+
+    The filedes argument is not a valid file descriptor.
+EINTR
+
+    The close call was interrupted by a signal. See Interrupted Primitives. Here is an example of how to handle EINTR properly:
+
+    TEMP_FAILURE_RETRY (close (desc));
+
+ENOSPC
+EIO
+EDQUOT
+   */
+  virtual int Close(int filedes) = 0;
+
+  /**
+   * The read function reads up to size bytes from the file with descriptor filedes, storing the results in the buffer. (This is not necessarily a character string, and no terminating null character is added.)
+   * @param filedes
+   * @param buffer
+   * @param size
+   * @return
+   * The return value is the number of bytes actually read. This might be less than size; for example, if there aren’t that many bytes left in the file or if there aren’t that many bytes immediately available. The exact behavior depends on what kind of file it is. Note that reading less than size bytes is not an error.
+
+A value of zero indicates end-of-file (except if the value of the size argument is also zero). This is not considered an error. If you keep calling read while at end-of-file, it will keep returning zero and doing nothing else.
+
+If read returns at least one character, there is no way you can tell whether end-of-file was reached. But if you did reach the end, the next read will return zero.
+
+In case of an error, read returns -1. The following errno error conditions are defined for this function:
+
+EAGAIN
+
+    Normally, when no input is immediately available, read waits for some input. But if the O_NONBLOCK flag is set for the file (see File Status Flags), read returns immediately without reading any data, and reports this error.
+
+    Compatibility Note: Most versions of BSD Unix use a different error code for this: EWOULDBLOCK. In the GNU C Library, EWOULDBLOCK is an alias for EAGAIN, so it doesn’t matter which name you use.
+
+    On some systems, reading a large amount of data from a character special file can also fail with EAGAIN if the kernel cannot find enough physical memory to lock down the user’s pages. This is limited to devices that transfer with direct memory access into the user’s memory, which means it does not include terminals, since they always use separate buffers inside the kernel. This problem never happens on GNU/Hurd systems.
+
+    Any condition that could result in EAGAIN can instead result in a successful read which returns fewer bytes than requested. Calling read again immediately would result in EAGAIN.
+EBADF
+
+    The filedes argument is not a valid file descriptor, or is not open for reading.
+EINTR
+
+    read was interrupted by a signal while it was waiting for input. See Interrupted Primitives. A signal will not necessarily cause read to return EINTR; it may instead result in a successful read which returns fewer bytes than requested.
+EIO
+
+    For many devices, and for disk files, this error code indicates a hardware error.
+
+    EIO also occurs when a background process tries to read from the controlling terminal, and the normal action of stopping the process by sending it a SIGTTIN signal isn’t working. This might happen if the signal is being blocked or ignored, or because the process group is orphaned. See Job Control, for more information about job control, and Signal Handling, for information about signals.
+EINVAL
+
+    In some systems, when reading from a character or block device, position and size offsets must be aligned to a particular block size. This error indicates that the offsets were not properly aligned.
+
+   */
+  virtual ssize_t Read(int filedes, void *buffer, size_t size) = 0;
+
+  /**
+   * The write function writes up to size bytes from buffer to the file with descriptor filedes. The data in buffer is not necessarily a character string and a null character is output like any other character.
+   * The return value is the number of bytes actually written. This may be size, but can always be smaller. Your program should always call write in a loop, iterating until all the data is written.
+
+Once write returns, the data is enqueued to be written and can be read back right away, but it is not necessarily written out to permanent storage immediately. You can use fsync when you need to be sure your data has been permanently stored before continuing.
+   * @param filedes
+   * @param buffer
+   * @param size
+   * @return
+   * In the case of an error, write returns -1. The following errno error conditions are defined for this function:
+
+EAGAIN
+
+    Normally, write blocks until the write operation is complete. But if the O_NONBLOCK flag is set for the file (see Control Operations), it returns immediately without writing any data and reports this error. An example of a situation that might cause the process to block on output is writing to a terminal device that supports flow control, where output has been suspended by receipt of a STOP character.
+
+    Compatibility Note: Most versions of BSD Unix use a different error code for this: EWOULDBLOCK. In the GNU C Library, EWOULDBLOCK is an alias for EAGAIN, so it doesn’t matter which name you use.
+
+    On some systems, writing a large amount of data from a character special file can also fail with EAGAIN if the kernel cannot find enough physical memory to lock down the user’s pages. This is limited to devices that transfer with direct memory access into the user’s memory, which means it does not include terminals, since they always use separate buffers inside the kernel. This problem does not arise on GNU/Hurd systems.
+EBADF
+
+    The filedes argument is not a valid file descriptor, or is not open for writing.
+EFBIG
+
+    The size of the file would become larger than the implementation can support.
+EINTR
+
+    The write operation was interrupted by a signal while it was blocked waiting for completion. A signal will not necessarily cause write to return EINTR; it may instead result in a successful write which writes fewer bytes than requested. See Interrupted Primitives.
+EIO
+
+    For many devices, and for disk files, this error code indicates a hardware error.
+ENOSPC
+
+    The device containing the file is full.
+EPIPE
+
+    This error is returned when you try to write to a pipe or FIFO that isn’t open for reading by any process. When this happens, a SIGPIPE signal is also sent to the process; see Signal Handling.
+EINVAL
+
+    In some systems, when writing to a character or block device, position and size offsets must be aligned to a particular block size. This error indicates that the offsets were not properly aligned.
+
+   */
+  virtual ssize_t Write(int filedes, const void *buffer, size_t size) = 0;
+
+  /**
+   * The lseek function is used to change the file position of the file with descriptor filedes.
+   * @param filedes
+   * @param offset
+   * @param whence The whence argument specifies how the offset should be interpreted, in the same way as for the fseek function, and it must be one of the symbolic constants SEEK_SET, SEEK_CUR, or SEEK_END.
+
+SEEK_SET
+
+    Specifies that offset is a count of characters from the beginning of the file.
+SEEK_CUR
+
+    Specifies that offset is a count of characters from the current file position. This count may be positive or negative.
+SEEK_END
+
+    Specifies that offset is a count of characters from the end of the file. A negative count specifies a position within the current extent of the file; a positive count specifies a position past the current end. If you set the position past the current end, and actually write data, you will extend the file with zeros up to that position.
+
+   * @return
+   * The return value from lseek is normally the resulting file position, measured in bytes from the beginning of the file. You can use this feature together with SEEK_CUR to read the current file position.
+
+If you want to append to the file, setting the file position to the current end of file with SEEK_END is not sufficient. Another process may write more data after you seek but before you write, extending the file so the position you write onto clobbers their data. Instead, use the O_APPEND operating mode; see Operating Modes.
+
+You can set the file position past the current end of the file. This does not by itself make the file longer; lseek never changes the file. But subsequent output at that position will extend the file. Characters between the previous end of file and the new position are filled with zeros. Extending the file in this way can create a “hole”: the blocks of zeros are not actually allocated on disk, so the file takes up less space than it appears to; it is then called a “sparse file”.
+
+If the file position cannot be changed, or the operation is in some way invalid, lseek returns a value of -1. The following errno error conditions are defined for this function:
+
+EBADF
+
+    The filedes is not a valid file descriptor.
+EINVAL
+
+    The whence argument value is not valid, or the resulting file offset is not valid. A file offset is invalid.
+ESPIPE
+
+    The filedes corresponds to an object that cannot be positioned, such as a pipe, FIFO or terminal device. (POSIX.1 specifies this error only for pipes and FIFOs, but on GNU systems, you always get ESPIPE if the object is not seekable.)
+
+   */
+  virtual off_t LSeek(int filedes, off_t offset, int whence) = 0;
+
+  /**
+   * This function copies up to length bytes from the file descriptor inputfd to the file descriptor outputfd.
+
+The function can operate on both the current file position (like read and write) . If the inputpos pointer is null, the file position of inputfd is used as the starting point of the copy operation, and the file position is advanced during it. If inputpos is not null, then *inputpos is used as the starting point of the copy operation, and *inputpos is incremented by the number of copied bytes, but the file position remains unchanged. Similar rules apply to outputfd and outputpos for the output file position.
+   * @param inputfd
+   * @param inputpos
+   * @param outputfd
+   * @param outputpos
+   * @param length
+   * @param flags
+   * @return
+   * The copy_file_range function returns the number of bytes copied. This can be less than the specified length in case the input file contains fewer remaining bytes than length, or if a read or write failure occurs. The return value is zero if the end of the input file is encountered immediately.
+
+If no bytes can be copied, to report an error, copy_file_range returns the value -1 and sets errno. The following errno error conditions are specific to this function:
+
+EISDIR
+
+    At least one of the descriptors inputfd or outputfd refers to a directory.
+EINVAL
+
+    At least one of the descriptors inputfd or outputfd refers to a non-regular, non-directory file (such as a socket or a FIFO).
+
+    The input or output positions before are after the copy operations are outside of an implementation-defined limit.
+
+    The flags argument is not zero.
+EFBIG
+
+    The new file size would exceed the process file size limit. See Limits on Resources.
+
+    The input or output positions before are after the copy operations are outside of an implementation-defined limit. This can happen if the file was not opened with large file support (LFS) on 32-bit machines, and the copy operation would create a file which is larger than what off_t could represent.
+EBADF
+
+    The argument inputfd is not a valid file descriptor open for reading.
+
+    The argument outputfd is not a valid file descriptor open for writing, or outputfd has been opened with O_APPEND.
+EXDEV
+
+    The input and output files reside on different file systems.
+In addition, copy_file_range can fail with the error codes which are used by read, pread, write, and pwrite.
+   */
+  virtual ssize_t CopyFileRange(int inputfd,
+                                off64_t *inputpos,
+                                int outputfd,
+                                off64_t *outputpos,
+                                ssize_t length,
+                                unsigned int flags) = 0;
+
+  /**
+   * A call to this function will not return as long as there is data which has not been written to the device.
+   */
+  virtual void Sync() = 0;
+
+  /**
+   * The fsync function can be used to make sure all data associated with the open file fildes is written to the device associated with the descriptor. The function call does not return unless all actions have finished.
+   * @param fildes
+   * @return
+   * The return value of the function is zero if no error occurred. Otherwise it is -1 and the global variable errno is set to the following values:
+
+EBADF
+
+    The descriptor fildes is not valid.
+EINVAL
+
+    No synchronization is possible since the system does not implement this.
+
+   */
+  virtual int FSync(int fildes) = 0;
 };
 
 #endif //FILESYSTEM_H

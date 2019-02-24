@@ -7,25 +7,27 @@
  *      File:   rocks_db_exception.cpp
  */
 
-#include "rocks_db_exception.h"
+#include "rocksdb_exception.h"
 
 namespace kvfs {
 RocksException::RocksException(
     const rocksdb::Status &status,
     const std::string &msg)
     : status_(status), msg_(msg) {
-  fullMsg_ = msg + "(Status: " + status_.ToString() + ")";
+  fullMsg_ = "[FS CRITICAL ERROR] : ";
+  fullMsg_ += "(Store Status: " + status_.ToString() + ")";
+  fullMsg_ += "\n\t\t (" + msg_ + ")";
 }
 
 const char *RocksException::what() const noexcept {
   return fullMsg_.c_str();
 }
-
-const rocksdb::Status &RocksException::getStatus() const {
-  return status_;
+RocksException::RocksException(const bool status, const std::string &msg)
+    : msg_(msg) {
+  std::string status_str = status ? "true" : "false";
+  fullMsg_ = "[FS CRITICAL ERROR] : ";
+  fullMsg_ += "(Store Status: " + status_str + ")";
+  fullMsg_ += "\n\t\t (" + msg_ + ")";
 }
 
-const std::string &RocksException::getMsg() const {
-  return msg_;
-}
-}
+}  // namespace kvfs

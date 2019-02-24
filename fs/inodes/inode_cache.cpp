@@ -10,8 +10,8 @@
 #include "inode_cache.h"
 
 namespace kvfs {
-void InodeCache::insert(const StoreEntryKey &key,
-                        const std::string &value) {
+void InodeCache::insert(const kvfsDirKey &key,
+                        const kvfsMetaData &value) {
   MutexLock lock;
 
   auto handle = InodeCacheEntry(key, value, INODE_WRITE);
@@ -26,17 +26,24 @@ void InodeCache::insert(const StoreEntryKey &key,
   }
 }
 
-bool InodeCache::get(const StoreEntryKey &key, InodeAccessMode mode, InodeCacheEntry &handle) {
+bool InodeCache::get(const kvfsDirKey &key, InodeAccessMode mode, InodeCacheEntry &handle) {
   MutexLock lock;
 
   auto it = cache_map_lookup_.find(key);
   if (it == cache_map_lookup_.end()) {
+    if (!store_->hasKey(key.to_string())) {
+      return false;
+    }
     StoreResult sr = store_->get(key.to_string());
     if (sr.isValid()) {
-      handle = InodeCacheEntry(key, sr.asString(), mode);
-      this->insert(key, sr.asString());
+      kvfsMetaData md_;
+      md_.parse(sr);
+      handle = InodeCacheEntry(key, md_, mode);
+      this->insert(key, md_);
       return true;
     }
+    // Something horribly went wrong here.
+    return false;
   }
   handle = it->second->second;
   cache_list_.push_front(*(it->second));
@@ -50,14 +57,14 @@ void InodeCache::clean_inode_handle(InodeCacheEntry handle) {
   MutexLock lock;
 
   if (handle.access_mode == INODE_WRITE) {
-    store_->put(handle.key_.to_string(), handle.value_);
+    store_->put(handle.key_.to_string(), handle.md_.to_string());
   }
   if (handle.access_mode == INODE_DELETE) {
-    store_->put(handle.key_.to_string(), handle.value_);
+    store_->put(handle.key_.to_string(), handle.md_.to_string());
   }
 }
 
-void InodeCache::evict(const StoreEntryKey &key) {
+void InodeCache::evict(const kvfsDirKey &key) {
   MutexLock lock;
 
   auto it = cache_map_lookup_.find(key);
@@ -71,10 +78,10 @@ void InodeCache::evict(const StoreEntryKey &key) {
 void InodeCache::write_back(InodeCacheEntry &handle) {
   MutexLock lock;
   if (handle.access_mode == INODE_WRITE) {
-    store_->put(handle.key_.to_string(), handle.value_);
+    store_->put(handle.key_.to_string(), handle.md_.to_string());
     handle.access_mode = INODE_READ;
   } else if (handle.access_mode == INODE_DELETE) {
-    store_->put(handle.key_.to_string(), handle.value_);
+    store_->put(handle.key_.to_string(), handle.md_.to_string());
     this->evict(handle.key_);
   }
 }

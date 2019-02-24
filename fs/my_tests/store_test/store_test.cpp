@@ -66,7 +66,7 @@ void convert_to_struct(istream& ip, unsigned char* data,
 }*/
 
 int main() {
-  string name = "/tmp/db/";
+  string name = "/tmp/db";
   std::shared_ptr<Store> store_;
 
   store_ = std::make_shared<RocksDBStore>(name);
@@ -74,47 +74,46 @@ int main() {
 //  std::unique_ptr<inode_cache> i_cache = std::make_unique<inode_cache>(2, store_);
   auto *d_cache = new DentryCache(256);
 
-  StoreEntryKey root{};
+  kvfsDirKey root{};
   auto seed = static_cast<uint32_t>(std::rand());
   root.inode_ = 0;
   root.hash_ = kvfs::XXH32(name.data(), static_cast<int>(name.size()), seed);
 
   std::cout << root.hash_ << std::endl;
 
-  StoreEntryValue root_value;
+  kvfsMetaData root_value;
 
   for (int i = 0; i < name.size(); ++i) {
     root_value.dirent_.d_name[i] = name[i];
   }
 
-  root_value.fstat_.st_ino = 0;
-  root_value.parent_hash_ = root.hash_;
+  root_value.parent_key_ = {0, root.hash_};
   root_value.fstat_ = {
       1, 20, 3, 45, 0
   };
-
+  root_value.fstat_.st_ino = 0;
   std::cout << sizeof(kvfs_stat) << std::endl;
   std::cout << root_value.to_string().size() << std::endl;
 
   d_cache->insert(root, root_value);
   d_cache->insert(root, root_value);
-  StoreEntryValue found{};
+  kvfsMetaData found{};
   auto foudn_bool = d_cache->find(root, found);
 //
-  std::cout << found.to_string() << std::endl;
+//  std::cout << found.to_string() << std::endl;
 
 //  ostringstream op;
-//  convert_to_hex_string(op, reinterpret_cast<const unsigned char *>(&root_value), sizeof(StoreEntryValue));
+//  convert_to_hex_string(op, reinterpret_cast<const unsigned char *>(&root_value), sizeof(kvfsMetaData));
 //  string output = op.str();
 //  cout << "After conversion from struct to hex string:\n"
 //       << output << endl;
   auto root_slice = root.to_string();
   auto root_value_slice = root_value.to_string();
 //  istringstream ip(root_value_slice.data());
-//  StoreEntryValue back{};
-//  convert_to_struct(ip, reinterpret_cast<unsigned char*>(&back), sizeof(StoreEntryValue));
-  std::cout << root_value_slice.data() << std::endl;
-  std::cout << root_value.to_string() << std::endl;
+//  kvfsMetaData back{};
+//  convert_to_struct(ip, reinterpret_cast<unsigned char*>(&back), sizeof(kvfsMetaData));
+//  std::cout << root_value_slice.data() << std::endl;
+//  std::cout << root_value.to_string() << std::endl;
   bool status = store_->put(root.to_string(), root_value.to_string());
 
   if (status) {
@@ -127,19 +126,24 @@ int main() {
     if (retrieve.isValid()) {
       std::cout << "root retrieve success." << std::endl;
 //      delete name;
-//      const auto *back = reinterpret_cast<const StoreEntryValue *>(retrieve.asString().data());
+//      const auto *back = reinterpret_cast<const kvfsMetaData *>(retrieve.asString().data());
       string output = retrieve.asString();
-      std::cout << output << std::endl;
+//      std::cout << output << std::endl;
 //      istringstream ip(output);
-      StoreEntryValue new_back{};
+      kvfsMetaData new_back{};
       new_back.parse(retrieve);
-//      convert_to_struct(ip, reinterpret_cast<unsigned char*>(&new_back), sizeof(StoreEntryValue));
+//      convert_to_struct(ip, reinterpret_cast<unsigned char*>(&new_back), sizeof(kvfsMetaData));
+
       std::cout << new_back.dirent_.d_name << std::endl;
       std::cout << new_back.fstat_.st_ino << std::endl;
-      std::cout << new_back.parent_hash_ << std::endl;
+      std::cout << new_back.parent_key_.to_string() << std::endl;
       std::cout << new_back.fstat_.st_dev << std::endl;
       std::cout << new_back.fstat_.st_ino << std::endl;
 //      std::cout << back.this_inode << std::endl;
+      std::string pwd_ = new_back.dirent_.d_name;
+      auto index = pwd_.find_last_of('/');
+      std::string val_from_pwd = pwd_.substr(index + 1, pwd_.length() - 1);
+      std::cout << "Current dir name: " << val_from_pwd << std::endl;
     }
   }
 

@@ -20,7 +20,7 @@ set(PACKAGE_VERSION "0.1")
 
 configure_file(
     ${PROJECT_SOURCE_DIR}/CMake/kvfs-config.h.in
-    config/kvfs_config.hpp
+    config/kvfs_config.h
 )
 
 ########## RocksDB Config #########################################
@@ -61,15 +61,15 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/fs)
 include_directories(${PROJECT_SOURCE_DIR}/include)
 set(
     KVFS_SRCS
-    fs/kvfs.cpp
-)
+    fs/kvfs/kvfs.cpp
+    fs/kvfs/fs_error.cpp fs/kvfs/fs_error.h)
 source_group("Source Files" FILES ${KVFS_SRCS})
 
 set(
     KVFS_HEADERS
     include/kvfs/kvfs.h
     include/kvfs/fs.h
-)
+    fs/kvfs/fs_error.cpp fs/kvfs/fs_error.h)
 source_group("Header Files" FILES ${KVFS_HEADERS})
 
 add_library(
@@ -82,4 +82,5 @@ target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
     kvfs_store
+    stdc++fs
 )

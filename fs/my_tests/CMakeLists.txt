@@ -5,5 +5,6 @@
 cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
 set(CMAKE_CXX_STANDARD 17)
 
+add_subdirectory(path_resolution_test)
 add_subdirectory(store_test)
 add_subdirectory(dentry_cache_test)

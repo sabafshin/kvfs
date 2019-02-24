@@ -12,32 +12,14 @@
 
 #include <rocksdb/db.h>
 
-using std::string;
-
 namespace kvfs {
 
 class RocksException : public std::exception {
  public:
   RocksException(const rocksdb::Status &status, const std::string &msg);
-
-  template<typename... Args>
-  static RocksException build(const rocksdb::Status &status, string arg) {
-    return RocksException(
-        status, arg);
-  }
-
-  template<typename... Args>
-  static void check(const rocksdb::Status &status, Args &&... args) {
-    if (!status.ok()) {
-      throw build(status, std::forward<Args>(args)...);
-    }
-  }
+  RocksException(bool status, const std::string &msg);
 
   const char *what() const noexcept override;
-
-  const rocksdb::Status &getStatus() const;
-
-  const std::string &getMsg() const;
 
  private:
   rocksdb::Status status_;

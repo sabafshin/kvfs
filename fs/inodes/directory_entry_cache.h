@@ -19,13 +19,13 @@
 
 namespace kvfs {
 struct DentryCacheComparator {
-  bool operator()(const StoreEntryKey &lhs, const StoreEntryKey &rhs) const {
+  bool operator()(const kvfsDirKey &lhs, const kvfsDirKey &rhs) const {
     return (lhs.hash_ == rhs.hash_) && (lhs.inode_ == rhs.inode_);
   }
 };
 
 struct DentryCacheHash {
-  std::size_t operator()(const StoreEntryKey &x) const {
+  std::size_t operator()(const kvfsDirKey &x) const {
     std::size_t seed = 0;
     seed ^= x.inode_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     seed ^= x.hash_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
@@ -35,19 +35,19 @@ struct DentryCacheHash {
 
 class DentryCache {
  public:
-  typedef std::pair<StoreEntryKey, StoreEntryValue> Entry;
+  typedef std::pair<kvfsDirKey, kvfsMetaData> Entry;
   typedef std::list<Entry> CacheList;
-  typedef std::unordered_map<StoreEntryKey, std::list<Entry>::iterator,
+  typedef std::unordered_map<kvfsDirKey, std::list<Entry>::iterator,
                              DentryCacheHash, DentryCacheComparator> CacheMap;
 
   explicit DentryCache(size_t size)
       : maxsize_(size) {}
 
-  bool find(StoreEntryKey &key, StoreEntryValue &value);
+  bool find(kvfsDirKey &key, kvfsMetaData &value);
 
-  void insert(StoreEntryKey &key, StoreEntryValue &value);
+  void insert(kvfsDirKey &key, kvfsMetaData &value);
 
-  void evict(StoreEntryKey &key);
+  void evict(kvfsDirKey &key);
 
   void size(size_t &size_cache_list, size_t &size_cache_map) {
     size_cache_map = cache_.size();

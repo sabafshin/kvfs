@@ -45,8 +45,8 @@ StoreResult RocksDBStore::get(const std::string &key) {
       return StoreResult();
     }
 
-    /*throw RocksException::build(
-            status, "failed to get " + key.data() + " from local store");*/
+    throw RocksException(
+        status, "failed to get " + key + " from local store");
   }
   return StoreResult(std::move(value));
 }
@@ -62,9 +62,9 @@ vector<StoreResult> RocksDBStore::get_children(const std::string &key) {
 
   auto val = get(key);
   if (val.isValid()) {
-    StoreEntryValue dirValue;
+    kvfsMetaData dirValue;
     dirValue.parse(val);
-    kvfs_file_inode_t prefix = dirValue.dirent_.d_ino;
+    kvfs_file_inode_t prefix = dirValue.fstat_.st_ino;
     vector<StoreResult> result;
     auto iter = db_handle->db->NewIterator(ReadOptions());
 
@@ -85,18 +85,10 @@ StoreResult RocksDBStore::get_parent(const std::string &key) {
   auto val = get(key);
 
   if (val.isValid()) {
-    StoreEntryValue dv{};
+    kvfsMetaData dv{};
     dv.parse(val);
-    kvfs_file_inode_t inode = dv.dirent_.d_ino - 1;
-
-    if (inode >= 0) {
-      kvfs_file_hash_t hash = dv.parent_hash_;
-      StoreEntryKey parent_key{inode, hash};
-      auto parent = get(parent_key.to_string());
-      if (parent.isValid()) {
-        return parent;
-      }
-    }
+    auto parent = dv.parent_key_;
+    return get(parent.to_string());
   }
   return StoreResult();
 }
@@ -106,9 +98,9 @@ bool RocksDBStore::hasKey(const std::string &key) const {
   auto status = db_handle->db->KeyMayExist(
       ReadOptions(), key, &value);
   if (!status) {
-    /*throw RocksException::build(
-            status, "failed to get ", key, " from local store");*/
-    return false;
+    std::string msg = "failed to get " + key + " from local store";
+    throw RocksException(
+        status, msg);
   }
   return true;
 }
@@ -172,8 +164,8 @@ void RocksDBWriteBatch::flush() {
   auto status = db_handle_->db->Write(WriteOptions(), &write_batch);
 
   if (!status.ok()) {
-    /*throw RocksException::build(
-            status, "error putting blob in Store");*/
+    throw RocksException(
+        status, "error putting blob in Store");
   }
 
   write_batch.Clear();

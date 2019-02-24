@@ -13,7 +13,7 @@
 #include <memory>
 #include <string>
 #include <rocksdb/db.h>
-#include <kvfs_config.hpp>
+#include <kvfs_config.h>
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
 

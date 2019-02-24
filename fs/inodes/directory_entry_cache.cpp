@@ -9,7 +9,7 @@
 
 #include "directory_entry_cache.h"
 
-bool kvfs::DentryCache::find(kvfs::StoreEntryKey &key, kvfs::StoreEntryValue &value) {
+bool kvfs::DentryCache::find(kvfs::kvfsDirKey &key, kvfs::kvfsMetaData &value) {
   MutexLock lock;
 
   auto it = lookup_.find(key);
@@ -25,7 +25,7 @@ bool kvfs::DentryCache::find(kvfs::StoreEntryKey &key, kvfs::StoreEntryValue &va
     return true;
   }
 }
-void kvfs::DentryCache::insert(kvfs::StoreEntryKey &key, kvfs::StoreEntryValue &value) {
+void kvfs::DentryCache::insert(kvfs::kvfsDirKey &key, kvfs::kvfsMetaData &value) {
   MutexLock lock;
 
   Entry ent(key, value);
@@ -37,7 +37,7 @@ void kvfs::DentryCache::insert(kvfs::StoreEntryKey &key, kvfs::StoreEntryValue &
   }
 
 }
-void kvfs::DentryCache::evict(kvfs::StoreEntryKey &key) {
+void kvfs::DentryCache::evict(kvfs::kvfsDirKey &key) {
   MutexLock lock;
   auto it = lookup_.find(key);
   if (it != lookup_.end()) {

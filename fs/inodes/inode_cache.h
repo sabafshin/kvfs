@@ -27,6 +27,7 @@ enum InodeAccessMode : uint8_t {
   INODE_READ = 0,
   INODE_DELETE = 1,
   INODE_WRITE = 2,
+  INODE_RW = 3
 };
 
 enum InodeState : uint8_t {
@@ -36,49 +37,48 @@ enum InodeState : uint8_t {
 };
 
 struct InodeCacheEntry {
-  StoreEntryKey key_;
-  std::string value_;
+  kvfsDirKey key_;
+  kvfsMetaData md_;
   InodeState state;
   InodeAccessMode access_mode;
 
-  InodeCacheEntry(const StoreEntryKey &key, std::string value, InodeAccessMode mode)
-      : key_(key), value_(std::move(value)), access_mode(mode) {}
+  InodeCacheEntry(const kvfsDirKey &key, kvfsMetaData value, InodeAccessMode mode)
+      : key_(key), md_(value), access_mode(mode) {}
   InodeCacheEntry() : access_mode(INODE_READ) {}
 };
 
 struct InodeCacheComparator {
-  bool operator()(const StoreEntryKey &lhs, const StoreEntryKey &rhs) const {
-    return (lhs.hash_ == rhs.hash_) && (lhs.inode_ == rhs.inode_) && (lhs.block_number_ == rhs.block_number_);
+  bool operator()(const kvfsDirKey &lhs, const kvfsDirKey &rhs) const {
+    return (lhs.hash_ == rhs.hash_) && (lhs.inode_ == rhs.inode_);
   }
 };
 
 struct InodeCacheHash {
-  std::size_t operator()(const StoreEntryKey &x) const {
+  std::size_t operator()(const kvfsDirKey &x) const {
     std::size_t seed = 0;
     seed ^= x.inode_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     seed ^= x.hash_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    seed ^= x.block_number_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     return seed;
   }
 };
 
 class InodeCache {
  public:
-  typedef std::pair<StoreEntryKey, InodeCacheEntry> Entry;
+  typedef std::pair<kvfsDirKey, InodeCacheEntry> Entry;
   typedef std::list<Entry> CacheList;
-  typedef std::unordered_map<StoreEntryKey, std::list<Entry>::iterator,
+  typedef std::unordered_map<kvfsDirKey, std::list<Entry>::iterator,
                              InodeCacheHash, InodeCacheComparator> CacheMap;
 
   explicit InodeCache(size_t size, const std::shared_ptr<Store> store)
       : max_size_(size), store_(store) {}
 
-  void insert(const StoreEntryKey &key, const std::string &value);
+  void insert(const kvfsDirKey &key, const kvfsMetaData &value);
 
-  bool get(const StoreEntryKey &key, InodeAccessMode mode, InodeCacheEntry &handle);
+  bool get(const kvfsDirKey &key, InodeAccessMode mode, InodeCacheEntry &handle);
 
   void write_back(InodeCacheEntry &key);
 
-  void evict(const StoreEntryKey &key);
+  void evict(const kvfsDirKey &key);
 
   size_t size();
 
