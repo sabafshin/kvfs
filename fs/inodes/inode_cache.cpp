@@ -60,7 +60,7 @@ void InodeCache::clean_inode_handle(InodeCacheEntry handle) {
     store_->put(handle.key_.to_string(), handle.md_.to_string());
   }
   if (handle.access_mode == INODE_DELETE) {
-    store_->put(handle.key_.to_string(), handle.md_.to_string());
+    store_->delete_(handle.key_.to_string());
   }
 }
 
@@ -81,8 +81,10 @@ void InodeCache::write_back(InodeCacheEntry &handle) {
     store_->put(handle.key_.to_string(), handle.md_.to_string());
     handle.access_mode = INODE_READ;
   } else if (handle.access_mode == INODE_DELETE) {
-    store_->put(handle.key_.to_string(), handle.md_.to_string());
+    store_->delete_(handle.key_.to_string());
     this->evict(handle.key_);
+  } else if (handle.access_mode == INODE_RW) {
+    store_->merge(handle.key_.to_string(), handle.md_.to_string());
   }
 }
 size_t InodeCache::size() {

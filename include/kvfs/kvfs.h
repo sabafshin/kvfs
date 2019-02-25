@@ -23,6 +23,7 @@
 #include <limits>
 #include <stdlib.h>
 #include <mutex>
+#include <iostream>
 
 namespace kvfs {
 
@@ -31,6 +32,10 @@ namespace kvfs {
 struct kvfsFileHandle {
   kvfsDirKey key_;
   kvfsMetaData md_;
+  int flags_;
+
+  kvfsFileHandle(const kvfsDirKey &key, const kvfsMetaData &md, int flags)
+      : key_(key), md_(md), flags_(flags) {};
 };
 
 class KVFS : public FS {
@@ -104,6 +109,7 @@ class KVFS : public FS {
   inline bool starts_with(const std::string &s1, const std::string &s2);
   std::filesystem::path GetSymLinkRealPath(const kvfsMetaData &data);
   kvfs_file_inode_t FreeInode();
+  bool FreeUpBlock(const kvfsBlockKey &key);
 };
 }  // namespace kvfs
 #endif //KVFS_FILESYSTEM_H

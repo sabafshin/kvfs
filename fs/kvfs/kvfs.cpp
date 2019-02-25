@@ -111,9 +111,8 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
   // now the path components all exist and resolved
   // check for O_CREAT flag
 
-  InodeCacheEntry handle;
+//  InodeCacheEntry handle;
   InodeAccessMode access_mode;
-  bool status = false;
   if ((flags & O_ACCMODE) == O_RDONLY) {
     access_mode = INODE_READ;
   } else if ((flags & O_ACCMODE) == O_WRONLY) {
@@ -124,77 +123,103 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
     // undefined access mode flags
     return -EINVAL;
   }
+  kvfsDirKey key = {current_key_.inode_, std::filesystem::hash_value(resolved_path_.filename())};
+  const string &key_str = key.to_string();
   if (flags & O_CREAT) {
     // If set, the file will be created if it doesn’t already exist.
-    kvfsDirKey key = {current_key_.inode_, std::filesystem::hash_value(resolved_path_.filename())};
     if (flags & O_EXCL) {
       // If both O_CREAT and O_EXCL are set, then open fails if the specified file already exists.
       // This is guaranteed to never clobber an existing file.
       {
         mutex_->lock();
-        if (inode_cache_->get(key, access_mode, handle)) {
+        if (store_->hasKey(key_str)) {
           // file exists return error
           mutex_->unlock();
           errorno_ = -EEXIST;
           throw FSError(FSErrorType::FS_EEXIST, "Flags O_CREAT and O_EXCL are set but the file already exists");
         }
       }
+    }
+    {
+      // create a new file
       {
-        {
-          // check if there is room for more open files
-          if (next_free_fd_ == KVFS_MAX_OPEN_FILES) {
-            errorno_ = ENOMEM;
-            throw FSError(FSErrorType::FS_ENOSPC, "Failed to open due to no more available file descriptors");
-          }
+        // check if there is room for more open files
+        if (next_free_fd_ == KVFS_MAX_OPEN_FILES) {
+          errorno_ = -ENOSPC;
+          throw FSError(FSErrorType::FS_ENOSPC, "Failed to open due to no more available file descriptors");
         }
-        // file doesn't exist so create new one
-        kvfsMetaData md_{};
-        // dirent.name
-        resolved_path_.string().copy(md_.dirent_.d_name, resolved_path_.string().length());
-        // get a free inode for this new file
-        md_.dirent_.d_ino = FreeInode();
-        md_.fstat_.st_ino = md_.dirent_.d_ino;
-        // generate stat
-        md_.fstat_.st_mode = mode;
-        md_.fstat_.st_blocks = 0;
-        md_.fstat_.st_ctim.tv_sec = std::time(nullptr);
-        md_.fstat_.st_blksize = KVFS_DEF_BLOCK_SIZE_4K;
-        // owner
-        md_.fstat_.st_uid = getuid();
-        md_.fstat_.st_gid = getgid();
-        // link count
-        if (S_ISREG(mode)) {
-          md_.fstat_.st_nlink = 1;
-        } else {
-          md_.fstat_.st_nlink = 2;
-        }
-        md_.fstat_.st_blocks = 0;
-        md_.fstat_.st_size = 0;
-        // set parent
-        md_.parent_key_ = current_key_;
-
-        // Acquire lock
-        mutex_->lock();
-        // generate a file descriptor
-        kvfsFileHandle fh_{};
-        int fd_ = next_free_fd_;
-        ++next_free_fd_;
-
       }
+      // file doesn't exist so create new one
+      // dirent.name
+      auto name = resolved_path_.filename().string();
+      auto md_ = kvfsMetaData(name, FreeInode(), mode, current_key_);
+      // Acquire lock
+      mutex_->lock();
+      // generate a file descriptor
+      auto fh_ = kvfsFileHandle(key, md_, flags);
+      auto fd_ = next_free_fd_;
+      ++next_free_fd_;
+
+      // insert into store
+      store_->put(key_str, md_.to_string());
+      // write it back if flag O_SYNC
+      if (flags & O_SYNC) {
+        store_->sync();
+      }
+      // add it to open_fds
+      open_fds_->at(fd_) = fh_;
+
+      // release lock
+      mutex_->unlock();
+      return fd_;
     }
   }
 
-  if (flags & O_TRUNC) {
-  }
+  // flag is not O_CREAT so open existing file
+  // Acquire lock
+  mutex_->lock();
 
-  if (flags & O_APPEND) {
+  auto sr = store_->get(key_str);
+  // ensure sr is valid
+  if (!sr.isValid()) {
+    errorno_ = -EIO;
+    return errorno_;
   }
+  auto md_ = kvfsMetaData();
+  md_.parse(sr);
+  auto fh_ = kvfsFileHandle(key, md_, flags);
 
-  int ret = 0;
-  if (status) {
+  auto fd_ = next_free_fd_;
+  ++next_free_fd_;
 
-  }
-  return 0;
+  // add it to open_fds
+  open_fds_->at(fd_) = fh_;
+
+  mutex_->unlock();
+
+  // not supported
+  /*if (flags & O_TRUNC) {
+    // check if file exists and then truncate its blocks to 0
+    mutex_->lock();
+    if (store_->hasKey(key_str)){
+      auto sr = store_->get(key_str);
+      kvfsMetaData md_ = kvfsMetaData();
+      md_.parse(sr);
+      // free the blocks of this file
+      mutex_->unlock();
+      if ( md_.fstat_.st_blocks > 1){
+        bool status = FreeUpBlock(md_.block_key_);
+        if (status){
+          // success
+        }
+      }
+      super_block_.total_block_count_ -= md_.fstat_.st_blocks;
+      md_.fstat_.st_blocks = 0;
+
+    }
+  }*/
+
+  return fd_;
 }
 bool kvfs::KVFS::Lookup(const char *buffer, kvfs::kvfsDirKey *key) {
   const char *lpos;
@@ -376,4 +401,122 @@ kvfs::kvfs_file_inode_t kvfs::KVFS::FreeInode() {
   ++super_block_.next_free_inode_;
   ++super_block_.total_inode_count_;
   return fi;
+}
+bool kvfs::KVFS::FreeUpBlock(const kvfsBlockKey &key) {
+  // check if freeblock key exists in store, loop through freeblocks
+  // until we find the last freeblock key, store this key in there.
+  // check free blocks count
+  // divide by 512 if bigger than 512
+  // generate key for freeblocks
+  mutex_->lock();
+  if (super_block_.freeblocks_count_ < 512) {
+    // add it to first freeblocks block
+    FreeBlocksKey fb_key = {"fb", 0};
+    if (store_->hasKey(fb_key.to_string())) {
+      auto sr = store_->get(fb_key.to_string());
+      if (sr.isValid()) {
+        FreeBlocksValue value;
+        value.parse(sr);
+        value.blocks[value.count_] = key;
+        ++value.count_;
+        // merge it in store
+        auto status = store_->merge(fb_key.to_string(), value.to_string());
+        if (!status) {
+          throw FSError(FSErrorType::FS_EIO, "Failed to perform IO in the store");
+        }
+      }
+    } else {
+      // generate the first fb block
+      FreeBlocksValue value{};
+      value.count_ = 1;
+      value.blocks[0] = key;
+    }
+  } else {
+    // fb count is >= 512
+    uint64_t number = super_block_.freeblocks_count_ / 512;
+    FreeBlocksKey fb_key = {"fb", number};
+    FreeBlocksValue fb_value{};
+    fb_value.blocks[fb_value.count_] = key;
+    ++fb_value.count_;
+    auto status = store_->merge(fb_key.to_string(), fb_value.to_string());
+    if (!status) {
+      throw FSError(FSErrorType::FS_EIO, "Failed to perform IO in the store");
+    }
+    if (fb_value.count_ == 512) {
+      // generate next fb_block
+      ++fb_key.number_;
+      FreeBlocksValue fb_value{};
+      status = store_->put(fb_key.to_string(), fb_value.to_string());
+      if (!status) {
+        throw FSError(FSErrorType::FS_EIO, "Failed to perform IO in the store");
+      }
+    }
+  }
+  mutex_->unlock();
+  return true;
+}
+ssize_t kvfs::KVFS::Read(int filedes, void *buffer, size_t size) {
+  try {
+    // filedes must exist in open_fds
+    auto fh_ = open_fds_->at(filedes);
+    // determine how many to read
+    std::memcpy(buffer, fh_.md_.inline_blck.data, fh_.md_.inline_blck.size_);
+    size_t count = 1;
+    if (size > KVFS_DEF_BLOCK_SIZE_4K) {
+      auto to_read = size / KVFS_DEF_BLOCK_SIZE_4K;
+      // copy inline
+      // keep orig index of buffer
+      auto org_idx = buffer;
+      buffer = (static_cast<char *>(buffer)) + fh_.md_.inline_blck.size_;
+      mutex_->lock();
+      auto bkey = fh_.md_.block_key_.to_string();
+      kvfsBlockValue bvalue;
+      for (size_t i = 0; i < to_read; ++i) {
+        // we assume buffer is byte aligned
+        if (store_->hasKey(bkey)) {
+          auto sr = store_->get(bkey);
+          bvalue.parse(sr);
+          std::memcpy(buffer, bvalue.data, bvalue.size_);
+          bkey = bvalue.next_block_.to_string();
+          buffer = (static_cast<char *>(buffer)) + bvalue.size_;
+          count += 1;
+        }
+      }
+      mutex_->unlock();
+      buffer = org_idx;
+    }
+    return count;
+  }
+  catch (...) {
+    std::cerr << "Failed to read. \n";
+    return -1;
+  }
+}
+ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
+  auto fh_ = open_fds_->at(filedes);
+  // check if inline data is not zero
+  if (fh_.md_.inline_blck.size_ == 0) {
+    // write inline first
+    if (size < KVFS_DEF_BLOCK_SIZE_4K) {
+      // fits into inline
+      mutex_->lock();
+      std::memcpy(fh_.md_.inline_blck.data, buffer, size);
+
+      // update the stat
+      fh_.md_.fstat_.st_blocks = 1;
+      fh_.md_.fstat_.st_size = size;
+      fh_.md_.fstat_.st_mtim.tv_sec = std::time(nullptr);
+      // merge it in store
+      auto status = store_->merge(fh_.key_.to_string(), fh_.md_.to_string());
+      if (!status) {
+        errorno_ = -EIO;
+        return errorno_;
+      }
+      return size;
+    } else {
+      // size is bigger than 4K
+
+    }
+  }
+  return 0;
 }

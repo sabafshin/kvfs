@@ -25,6 +25,7 @@ struct SuperBlock {
   time_t fs_last_access_time_;
   time_t fs_last_modification_time_;
   kvfsDirKey store_end_key;
+  size_t freeblocks_count_;
 
   void parse(const StoreResult &sr) {
     auto bytes_ = sr.asString();
@@ -41,7 +42,7 @@ struct SuperBlock {
 };
 
 struct FreeBlocksKey {
-  char name[2];
+  char name[3];
   uint64_t number_;
 
   std::string to_string() const {
@@ -51,7 +52,9 @@ struct FreeBlocksKey {
 };
 struct FreeBlocksValue {
   FreeBlocksKey next_key_;
-  uint64_t blocks[512];
+  uint32_t count_;
+  kvfsBlockKey blocks[512];
+
 
   std::string to_string() const {
     std::string bytes_;

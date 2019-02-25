@@ -684,6 +684,49 @@ EINVAL
 
    */
   virtual int FSync(int fildes) = 0;
+  /**
+   * The pread function is similar to the read function. The first three arguments are identical, and the return values and error codes also correspond.
+
+The difference is the fourth argument and its handling. The data block is not read from the current position of the file descriptor filedes. Instead the data is read from the file starting at position offset. The position of the file descriptor itself is not affected by the operation. The value is the same as before the call.
+
+When the source file is compiled with _FILE_OFFSET_BITS == 64 the pread function is in fact pread64 and the type off_t has 64 bits, which makes it possible to handle files up to 2^63 bytes in length.
+
+
+   * @param filedes
+   * @param buffer
+   * @param size
+   * @param offset
+   * @return
+   * The return value of pread describes the number of bytes read. In the error case it returns -1 like read does and the error codes are also the same, with these additions:
+
+EINVAL
+
+    The value given for offset is negative and therefore illegal.
+ESPIPE
+
+    The file descriptor filedes is associated with a pipe or a FIFO and this device does not allow positioning of the file pointer.
+   */
+  virtual ssize_t PRead(int filedes, void *buffer, size_t size, off_t offset) = 0;
+
+  /**
+   * The pwrite function is similar to the write function. The first three arguments are identical, and the return values and error codes also correspond.
+
+The difference is the fourth argument and its handling. The data block is not written to the current position of the file descriptor filedes. Instead the data is written to the file starting at position offset. The position of the file descriptor itself is not affected by the operation. The value is the same as before the call.
+   * @param filedes
+   * @param buffer
+   * @param size
+   * @param offset
+   * @return The return value of pwrite describes the number of written bytes. In the error case it returns -1 like write does and the error codes are also the same, with these additions:
+
+EINVAL
+
+    The value given for offset is negative and therefore illegal.
+ESPIPE
+
+    The file descriptor filedes is associated with a pipe or a FIFO and this device does not allow positioning of the file pointer.
+
+   */
+  virtual ssize_t pwrite(int filedes, const void *buffer, size_t size, off_t offset) = 0;
 };
 
 #endif //FILESYSTEM_H

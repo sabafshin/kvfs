@@ -16,6 +16,10 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <cstring>
+#include <time.h>
+#include <ctime>
+#include <fcntl.h>
+#include <zconf.h>
 
 namespace kvfs {
 enum class StoreEntryType : uint8_t {
@@ -55,7 +59,8 @@ struct kvfsBlockKey {
 
 struct kvfsBlockValue {
   kvfsBlockKey next_block_;
-  char data[4096];
+  size_t size_;
+  char data[KVFS_DEF_BLOCK_SIZE_4K];
 
   std::string to_string() const {
     std::string bytes_;
@@ -78,8 +83,38 @@ struct kvfsMetaData {
   kvfs_stat fstat_;
   kvfsBlockKey block_key_;
   kvfsDirKey real_key_;
-  char inline_data[KVFS_DEF_BLOCK_SIZE_4K];
+  kvfsBlockValue inline_blck;
 
+  kvfsMetaData() = default;
+
+  kvfsMetaData(const std::string &name,
+               const kvfs_file_inode_t &inode,
+               const mode_t &mode,
+               const kvfsDirKey &current_key_) {
+    name.copy(dirent_.d_name, name.length());
+    // get a free inode for this new file
+    dirent_.d_ino = inode;
+    fstat_.st_ino = dirent_.d_ino;
+    // generate stat
+    fstat_.st_mode = mode;
+    fstat_.st_blocks = 0;
+    fstat_.st_ctim.tv_sec = std::time(nullptr);
+    fstat_.st_blksize = KVFS_DEF_BLOCK_SIZE_4K;
+    // owner
+    fstat_.st_uid = getuid();
+    fstat_.st_gid = getgid();
+    // link count
+    if (S_ISREG(mode)) {
+      fstat_.st_nlink = 1;
+    } else {
+      fstat_.st_nlink = 2;
+    }
+    fstat_.st_blocks = 0;
+    fstat_.st_size = 0;
+    // set parent
+    parent_key_ = current_key_;
+  }
+  
   void parse(const kvfs::StoreResult &result) {
     auto bytes = result.asString();
     if (bytes.size() != sizeof(kvfsMetaData)) {
