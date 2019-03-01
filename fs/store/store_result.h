@@ -73,7 +73,7 @@ class StoreResult {
   StoreResult &operator=(StoreResult const &) = delete;
 
  private:
-  [[noreturn]] void throwInvalidError() const {
+  void throwInvalidError() const {
     // Maybe we should define our own more specific error type in the future
     throw std::domain_error("value not present in store");
   }

@@ -50,6 +50,8 @@ class RocksDBStore : public Store {
 
   bool compact() override;
 
+  bool destroy() override;
+
   std::unique_ptr<WriteBatch> beginWrite(size_t buf_size = 0) override;
 
  private:

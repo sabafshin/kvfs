@@ -95,10 +95,10 @@ int main() {
   std::cout << sizeof(kvfs_stat) << std::endl;
   std::cout << root_value.pack().size() << std::endl;
 
-  d_cache->insert(root, root_value);
-  d_cache->insert(root, root_value);
-  kvfsMetaData found{};
-  auto foudn_bool = d_cache->find(root, found);
+//  d_cache->insert(root, root_value);
+//  d_cache->insert(root, root_value);
+//  kvfsMetaData found{};
+//  auto foudn_bool = d_cache->find(root, found);
 //
 //  std::cout << found.pack() << std::endl;
 

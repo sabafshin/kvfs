@@ -306,7 +306,6 @@ class FS {
    * The file named by filename doesn’t exist.
    */
   virtual int Stat(const char *filename, struct stat *buf) = 0;
-  virtual int Stat64(const char *filename, struct stat64 *buf) = 0;
 
   /**
    * The chmod function sets the access permission bits for the file named by filename to mode.
@@ -396,7 +395,6 @@ class FS {
    * The operation was interrupted by a signal.
    */
   virtual int Truncate(const char *filename, off_t length) = 0;
-  virtual int Truncate64(const char *name, off64_t length) = 0;
 
   /**
    * The mknod function makes a special file with name filename. The mode specifies the mode of the file,
@@ -727,6 +725,8 @@ ESPIPE
 
    */
   virtual ssize_t pwrite(int filedes, const void *buffer, size_t size, off_t offset) = 0;
+
+  virtual void DestroyFS() = 0;
 };
 
 #endif //FILESYSTEM_H

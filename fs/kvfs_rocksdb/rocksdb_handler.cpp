@@ -27,11 +27,12 @@ RocksHandles::RocksHandles(string dbPath) {
 
   // Create the DB if it's not already present.
   options.create_if_missing = true;
+  options.enable_pipelined_write = true;
 
-  rocksdb::TransactionDB *dbRaw;
+  rocksdb::DB *dbRaw;
 
   auto status =
-      rocksdb::TransactionDB::Open(options, rocksdb::TransactionDBOptions(), dbPath, &dbRaw);
+      rocksdb::DB::Open(options, dbPath, &dbRaw);
   if (!status.ok()) {
     throw std::runtime_error("Failed to open DB at the given path");
   }

@@ -56,9 +56,10 @@ include_directories(${ROCKSDB_SOURCE_DIR}/util)
 
 include_directories(${PROJECT_SOURCE_DIR}/config)
 include_directories(${PROJECT_SOURCE_DIR}/fs)
+include_directories(${PROJECT_SOURCE_DIR}/include)
+
 add_subdirectory(${PROJECT_SOURCE_DIR}/fs)
 
-include_directories(${PROJECT_SOURCE_DIR}/include)
 set(
     KVFS_SRCS
     fs/kvfs/kvfs.cpp
@@ -69,7 +70,8 @@ set(
     KVFS_HEADERS
     include/kvfs/kvfs.h
     include/kvfs/fs.h
-    fs/kvfs/fs_error.cpp fs/kvfs/fs_error.h)
+    fs/kvfs/fs_error.cpp
+    fs/kvfs/fs_error.h)
 source_group("Header Files" FILES ${KVFS_HEADERS})
 
 add_library(
@@ -81,6 +83,9 @@ add_library(
 target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
+    kvfs_utils
+    kvfs_rocksdb
     kvfs_store
+    kvfs_inodes
     stdc++fs
 )

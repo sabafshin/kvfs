@@ -41,6 +41,7 @@ class Store {
 
   virtual bool hasKey(const std::string &key) const = 0;
 
+  virtual bool destroy() = 0;
   class WriteBatch {
    public:
     virtual void put(const std::string &key, const std::string &value) = 0;

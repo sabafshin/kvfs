@@ -85,13 +85,13 @@ struct kvfsBlockValue {
 };
 
 struct kvfsMetaData {
-  kvfs_dirent dirent_;
-  kvfsDirKey parent_key_;
-  kvfs_stat fstat_;
-  kvfsBlockKey first_block_key_;
-  kvfsBlockKey last_block_key_;
-  kvfsDirKey real_key_;
-  kvfsBlockValue inline_blck;
+  kvfs_dirent dirent_{};
+  kvfsDirKey parent_key_{};
+  kvfs_stat fstat_{};
+  kvfsBlockKey first_block_key_{};
+  kvfsBlockKey last_block_key_{};
+  kvfsDirKey real_key_{};
+  kvfsBlockValue inline_blck{};
 
 
   kvfsMetaData() = default;

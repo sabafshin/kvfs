@@ -26,12 +26,13 @@ void RocksDBStore::close() {
 }
 
 bool RocksDBStore::put(const std::string &key, const std::string &value) {
-  auto txn = db_handle->db->BeginTransaction(WriteOptions());
+//  auto txn = db_handle->db->BeginTransaction(WriteOptions());
 
-  txn->Put(key, value);
+//  txn->Put(key, value);
 
-  auto status = txn->Commit();
+//  auto status = txn->Commit();
 
+  auto status = db_handle->db->Put(rocksdb::WriteOptions(), key, value);
   return status.ok();
 }
 
@@ -52,9 +53,10 @@ StoreResult RocksDBStore::get(const std::string &key) {
 }
 
 bool RocksDBStore::delete_(const std::string &key) {
-  auto txn = db_handle->db->BeginTransaction(WriteOptions());
-  txn->Delete(key);
-  auto status = txn->Commit();
+//  auto txn = db_handle->db->BeginTransaction(WriteOptions());
+//  txn->Delete(key);
+//  auto status = txn->Commit();
+  auto status = db_handle->db->Delete(rocksdb::WriteOptions(), key);
   return status.ok();
 }
 
@@ -97,12 +99,7 @@ bool RocksDBStore::hasKey(const std::string &key) const {
   string value;
   auto status = db_handle->db->KeyMayExist(
       ReadOptions(), key, &value);
-  if (!status) {
-    std::string msg = "failed to get " + key + " from local store";
-    throw RocksException(
-        status, msg);
-  }
-  return true;
+  return status;
 }
 
 bool RocksDBStore::sync() {
@@ -117,22 +114,22 @@ bool RocksDBStore::compact() {
 }
 
 bool RocksDBStore::merge(const std::string &key, const std::string &value) {
-  auto txn = db_handle->db->BeginTransaction(WriteOptions());
-  txn->Merge(key, value);
-  auto status = txn->Commit();
+//  auto txn = db_handle->db->BeginTransaction(WriteOptions());
+//  txn->Merge(key, value);
+  auto status = db_handle->db->Merge(rocksdb::WriteOptions(), key, value);
   return status.ok();
 }
 
 bool RocksDBStore::delete_range(const std::string &start, const std::string &end) {
-  auto txn = db_handle->db->BeginTransaction(WriteOptions());
+//  auto txn = db_handle->db->BeginTransaction(WriteOptions());
 
-  txn->SetSavePoint();
+//  txn->SetSavePoint();
   auto status = db_handle->db->DeleteRange(WriteOptions(), db_handle->db->DefaultColumnFamily(), start, end);
   if (!status.ok()) {
-    txn->RollbackToSavePoint();
+//    txn->RollbackToSavePoint();
     return false;
   }
-  txn->PopSavePoint();
+//  txn->PopSavePoint();
 
   return true;
 }
@@ -197,6 +194,10 @@ void RocksDBWriteBatch::delete_(const std::string &key) {
 
 std::unique_ptr<Store::WriteBatch> RocksDBStore::beginWrite(size_t buf_size) {
   return std::make_unique<RocksDBWriteBatch>(db_handle, buf_size);
+}
+bool RocksDBStore::destroy() {
+  rocksdb::DestroyDB(this->db_handle->db->GetName(), db_handle->db->GetOptions());
+  return true;
 }
 
 }//namespace kvfs

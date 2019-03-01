@@ -9,38 +9,42 @@
 
 #include "directory_entry_cache.h"
 
-bool kvfs::DentryCache::find(kvfs::kvfsDirKey &key, kvfs::kvfsMetaData &value) {
-  MutexLock lock;
+bool kvfs::DentryCache::find(const int &filedes, kvfs::kvfsFileHandle &value) {
+  mutex_->lock();
 
-  auto it = lookup_.find(key);
+  auto it = lookup_.find(filedes);
   if (it == lookup_.end()) {
+    mutex_->unlock();
     return false;
   } else {
 
     value = it->second->second;
     cache_.push_front(*(it->second));
     cache_.erase(it->second);
-    lookup_[key] = cache_.begin();
-
+    lookup_[filedes] = cache_.begin();
+    mutex_->unlock();
     return true;
   }
 }
-void kvfs::DentryCache::insert(kvfs::kvfsDirKey &key, kvfs::kvfsMetaData &value) {
-  MutexLock lock;
+void kvfs::DentryCache::insert(const int &filedes, kvfs::kvfsFileHandle &value) {
+  mutex_->lock();
 
-  Entry ent(key, value);
+  Entry ent(filedes, value);
   cache_.push_front(ent);
-  lookup_[key] = cache_.begin();
+  lookup_[filedes] = cache_.begin();
   if (cache_.size() > maxsize_) {
     lookup_.erase(cache_.back().first);
     cache_.pop_back();
   }
-
+  mutex_->unlock();
 }
-void kvfs::DentryCache::evict(kvfs::kvfsDirKey &key) {
-  MutexLock lock;
-  auto it = lookup_.find(key);
+void kvfs::DentryCache::evict(const int &filedes) {
+  mutex_->lock();
+
+  auto it = lookup_.find(filedes);
   if (it != lookup_.end()) {
     lookup_.erase(it);
   }
+
+  mutex_->unlock();
 }

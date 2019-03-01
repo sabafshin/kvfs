@@ -11,55 +11,65 @@
 #define KVFS_DIRECTORY_ENTRY_CACHE_H
 
 #include <store/store_entry.h>
-#include <kvfs_utils/mutex.h>
-#include <kvfs_utils/mutex_lock.h>
-
+#include <mutex>
 #include <list>
 #include <unordered_map>
+#include <memory>
 
 namespace kvfs {
+
+struct kvfsFileHandle {
+  kvfsDirKey key_;
+  kvfsMetaData md_;
+  int flags_;
+
+  kvfsFileHandle() {}
+  kvfsFileHandle(const kvfsDirKey &key, const kvfsMetaData &md, int flags)
+      : key_(key), md_(md), flags_(flags) {};
+};
+
 struct DentryCacheComparator {
-  bool operator()(const kvfsDirKey &lhs, const kvfsDirKey &rhs) const {
-    return (lhs.hash_ == rhs.hash_) && (lhs.inode_ == rhs.inode_);
+  bool operator()(const int &lhs, const int &rhs) const {
+    return (lhs == rhs);
   }
 };
 
 struct DentryCacheHash {
-  std::size_t operator()(const kvfsDirKey &x) const {
-    std::size_t seed = 0;
-    seed ^= x.inode_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    seed ^= x.hash_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    return seed;
+  std::size_t operator()(const int &x) const {
+    return static_cast<size_t>(x);
   }
 };
 
 class DentryCache {
  public:
-  typedef std::pair<kvfsDirKey, kvfsMetaData> Entry;
+  typedef std::pair<int, kvfsFileHandle> Entry;
   typedef std::list<Entry> CacheList;
-  typedef std::unordered_map<kvfsDirKey, std::list<Entry>::iterator,
+  typedef std::unordered_map<int, std::list<Entry>::iterator,
                              DentryCacheHash, DentryCacheComparator> CacheMap;
 
   explicit DentryCache(size_t size)
-      : maxsize_(size) {}
+      : maxsize_(size), mutex_(std::make_unique<std::mutex>()) {}
 
-  bool find(kvfsDirKey &key, kvfsMetaData &value);
+  bool find(const int &filedes, kvfsFileHandle &value);
 
-  void insert(kvfsDirKey &key, kvfsMetaData &value);
+  void insert(const int &filedes, kvfsFileHandle &value);
 
-  void evict(kvfsDirKey &key);
+  void evict(const int &filedes);
 
   void size(size_t &size_cache_list, size_t &size_cache_map) {
     size_cache_map = cache_.size();
     size_cache_list = lookup_.size();
   }
 
-  ~DentryCache() = default;
+  ~DentryCache() {
+    mutex_.reset();
+  };
 
  private:
   size_t maxsize_;
   CacheList cache_;
   CacheMap lookup_;
+  std::unique_ptr<std::mutex> mutex_;
 
 };
 }  // namespace kvfs

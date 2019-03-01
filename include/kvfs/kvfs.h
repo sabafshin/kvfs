@@ -24,19 +24,14 @@
 #include <stdlib.h>
 #include <mutex>
 #include <iostream>
+#include <array>
+#include <algorithm>
+#include <string.h>
+#include <cstring>
 
 namespace kvfs {
 
 #define time_now std::time(nullptr)
-
-struct kvfsFileHandle {
-  kvfsDirKey key_;
-  kvfsMetaData md_;
-  int flags_;
-
-  kvfsFileHandle(const kvfsDirKey &key, const kvfsMetaData &md, int flags)
-      : key_(key), md_(md), flags_(flags) {};
-};
 
 class KVFS : public FS {
  public:
@@ -61,14 +56,12 @@ class KVFS : public FS {
   int Rename(const char *oldname, const char *newname) override;
   int MkDir(const char *filename, mode_t mode) override;
   int Stat(const char *filename, struct stat *buf) override;
-  int Stat64(const char *filename, struct stat64 *buf) override;
   int ChMod(const char *filename, mode_t mode) override;
   int Access(const char *filename, int how) override;
   int UTime(const char *filename, const struct utimbuf *times) override;
   int Truncate(const char *filename, off_t length) override;
-  int Truncate64(const char *name, off64_t length) override;
   int Mknod(const char *filename, mode_t mode, dev_t dev) override;
-  void TuneFS();
+  void TuneFS() override;
   int Open(const char *filename, int flags, mode_t mode) override;
   int Close(int filedes) override;
   ssize_t Read(int filedes, void *buffer, size_t size) override;
@@ -82,21 +75,21 @@ class KVFS : public FS {
                         unsigned int flags) override;
   void Sync() override;
   int FSync(int fildes) override;
-
-
+  ssize_t PRead(int filedes, void *buffer, size_t size, off_t offset) override;
+  ssize_t pwrite(int filedes, const void *buffer, size_t size, off_t offset) override;
+  void DestroyFS() override;
  private:
   std::filesystem::path root_path;
   std::shared_ptr<Store> store_;
   std::unique_ptr<InodeCache> inode_cache_;
-  std::unique_ptr<DentryCache> dentry_cache_;
-  SuperBlock super_block_;
+  std::unique_ptr<DentryCache> open_fds_;
+  SuperBlock super_block_{};
   int8_t errorno_;
   std::filesystem::path cwd_name_;
   std::filesystem::path pwd_;
   kvfs_stat current_stat_;
   kvfsDirKey current_key_;
   int next_free_fd_;
-  std::unique_ptr<std::unordered_map<int, kvfs::kvfsFileHandle>> open_fds_;
   std::unique_ptr<std::mutex> mutex_;
   // Private Methods
  private:
@@ -111,6 +104,7 @@ class KVFS : public FS {
   kvfs_file_inode_t FreeInode();
   bool FreeUpBlock(const kvfsBlockKey &key);
   kvfsBlockKey GetFreeBlock();
+
 };
 }  // namespace kvfs
 #endif //KVFS_FILESYSTEM_H

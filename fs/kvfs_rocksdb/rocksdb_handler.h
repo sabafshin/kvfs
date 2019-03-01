@@ -33,7 +33,7 @@ namespace kvfs {
  * required to interact with our local rocksdb store.
  */
 struct RocksHandles {
-  std::unique_ptr<rocksdb::TransactionDB> db;
+  std::unique_ptr<rocksdb::DB> db;
 
   ~RocksHandles();
 

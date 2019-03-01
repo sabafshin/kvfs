@@ -28,10 +28,7 @@ add_library(
     ${STORE_SRCS}
     ${STORE_HEADERS})
 
-target_link_libraries(
-    ${PROJECT_NAME}
-    PRIVATE
-    kvfs_rocksdb
-    kvfs_inodes
-    kvfs_utils
-)
+#target_link_libraries(
+#    ${PROJECT_NAME}
+#    PRIVATE
+#)
