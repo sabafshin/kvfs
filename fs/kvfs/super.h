@@ -26,6 +26,7 @@ struct SuperBlock {
   time_t fs_last_modification_time_;
   kvfsDirKey store_end_key;
   size_t freeblocks_count_;
+  uint64_t next_free_block_number;
 
   void parse(const StoreResult &sr) {
     auto bytes_ = sr.asString();
@@ -35,9 +36,10 @@ struct SuperBlock {
     auto *idx = bytes_.data();
     memmove(this, idx, sizeof(SuperBlock));
   }
-  std::string to_string() const {
-    std::string bytes_;
-    return bytes_.append(reinterpret_cast<const char *>(this), sizeof(SuperBlock));
+  std::string pack() const {
+    std::string d(sizeof(SuperBlock), L'\0');
+    memcpy(&d[0], this, d.size());
+    return d;
   }
 };
 
@@ -45,9 +47,10 @@ struct FreeBlocksKey {
   char name[3];
   uint64_t number_;
 
-  std::string to_string() const {
-    std::string bytes_;
-    return bytes_.append(reinterpret_cast<const char *>(this), sizeof(FreeBlocksKey));
+  std::string pack() const {
+    std::string d(sizeof(FreeBlocksKey), L'\0');
+    memcpy(&d[0], this, d.size());
+    return d;
   }
 };
 struct FreeBlocksValue {
@@ -55,10 +58,10 @@ struct FreeBlocksValue {
   uint32_t count_;
   kvfsBlockKey blocks[512];
 
-
-  std::string to_string() const {
-    std::string bytes_;
-    return bytes_.append(reinterpret_cast<const char *>(this), sizeof(FreeBlocksValue));
+  std::string pack() const {
+    std::string d(sizeof(FreeBlocksValue), L'\0');
+    memcpy(&d[0], this, d.size());
+    return d;
   }
 
   void parse(const StoreResult &sr) {

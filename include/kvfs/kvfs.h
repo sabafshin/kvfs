@@ -110,6 +110,7 @@ class KVFS : public FS {
   std::filesystem::path GetSymLinkRealPath(const kvfsMetaData &data);
   kvfs_file_inode_t FreeInode();
   bool FreeUpBlock(const kvfsBlockKey &key);
+  kvfsBlockKey GetFreeBlock();
 };
 }  // namespace kvfs
 #endif //KVFS_FILESYSTEM_H

@@ -31,10 +31,10 @@ bool InodeCache::get(const kvfsDirKey &key, InodeAccessMode mode, InodeCacheEntr
 
   auto it = cache_map_lookup_.find(key);
   if (it == cache_map_lookup_.end()) {
-    if (!store_->hasKey(key.to_string())) {
+    if (!store_->hasKey(key.pack())) {
       return false;
     }
-    StoreResult sr = store_->get(key.to_string());
+    StoreResult sr = store_->get(key.pack());
     if (sr.isValid()) {
       kvfsMetaData md_;
       md_.parse(sr);
@@ -57,10 +57,10 @@ void InodeCache::clean_inode_handle(InodeCacheEntry handle) {
   MutexLock lock;
 
   if (handle.access_mode == INODE_WRITE) {
-    store_->put(handle.key_.to_string(), handle.md_.to_string());
+    store_->put(handle.key_.pack(), handle.md_.pack());
   }
   if (handle.access_mode == INODE_DELETE) {
-    store_->delete_(handle.key_.to_string());
+    store_->delete_(handle.key_.pack());
   }
 }
 
@@ -78,13 +78,13 @@ void InodeCache::evict(const kvfsDirKey &key) {
 void InodeCache::write_back(InodeCacheEntry &handle) {
   MutexLock lock;
   if (handle.access_mode == INODE_WRITE) {
-    store_->put(handle.key_.to_string(), handle.md_.to_string());
+    store_->put(handle.key_.pack(), handle.md_.pack());
     handle.access_mode = INODE_READ;
   } else if (handle.access_mode == INODE_DELETE) {
-    store_->delete_(handle.key_.to_string());
+    store_->delete_(handle.key_.pack());
     this->evict(handle.key_);
   } else if (handle.access_mode == INODE_RW) {
-    store_->merge(handle.key_.to_string(), handle.md_.to_string());
+    store_->merge(handle.key_.pack(), handle.md_.pack());
   }
 }
 size_t InodeCache::size() {

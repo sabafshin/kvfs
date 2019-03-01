@@ -88,7 +88,7 @@ StoreResult RocksDBStore::get_parent(const std::string &key) {
     kvfsMetaData dv{};
     dv.parse(val);
     auto parent = dv.parent_key_;
-    return get(parent.to_string());
+    return get(parent.pack());
   }
   return StoreResult();
 }

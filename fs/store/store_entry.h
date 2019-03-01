@@ -27,7 +27,7 @@ enum class StoreEntryType : uint8_t {
 };
 
 typedef size_t kvfs_file_hash_t;
-
+typedef unsigned char byte;
 #ifdef __USE_LARGEFILE64
 typedef struct dirent64 kvfs_dirent;
 typedef struct stat64 kvfs_stat;
@@ -42,29 +42,36 @@ struct kvfsDirKey {
   kvfs_file_inode_t inode_;
   kvfs_file_hash_t hash_;
 
-  std::string to_string() const {
-    std::string bytes_;
-    return bytes_.append(reinterpret_cast<const char *>(this), sizeof(kvfsDirKey));
+  std::string pack() const {
+    std::string d(sizeof(kvfsDirKey), L'\0');
+    memcpy(&d[0], this, d.size());
+    return d;
   }
 };
 
 struct kvfsBlockKey {
   uint64_t block_number_;
 
-  std::string to_string() const {
-    std::string bytes_;
-    return bytes_.append(reinterpret_cast<const char *>(this), sizeof(kvfsBlockKey));
+  std::string pack() const {
+    std::string d(sizeof(kvfsBlockKey), L'\0');
+    memcpy(&d[0], this, d.size());
+    return d;
+  }
+
+  bool operator==(const kvfsBlockKey &c2) const {
+    return c2.block_number_ == this->block_number_;
   }
 };
 
 struct kvfsBlockValue {
   kvfsBlockKey next_block_;
   size_t size_;
-  char data[KVFS_DEF_BLOCK_SIZE_4K];
+  byte data[KVFS_DEF_BLOCK_SIZE_4K];
 
-  std::string to_string() const {
-    std::string bytes_;
-    return bytes_.append(reinterpret_cast<const char *>(this), sizeof(kvfsBlockValue));
+  std::string pack() const {
+    std::string d(sizeof(kvfsBlockValue), L'\0');
+    memcpy(&d[0], this, d.size());
+    return d;
   }
 
   void parse(const StoreResult &sr) {
@@ -81,9 +88,11 @@ struct kvfsMetaData {
   kvfs_dirent dirent_;
   kvfsDirKey parent_key_;
   kvfs_stat fstat_;
-  kvfsBlockKey block_key_;
+  kvfsBlockKey first_block_key_;
+  kvfsBlockKey last_block_key_;
   kvfsDirKey real_key_;
   kvfsBlockValue inline_blck;
+
 
   kvfsMetaData() = default;
 
@@ -124,9 +133,10 @@ struct kvfsMetaData {
     memmove(this, idx, sizeof(kvfsMetaData));
   }
 
-  std::string to_string() const {
-    std::string bytes_;
-    return bytes_.append(reinterpret_cast<const char *>(this), sizeof(kvfsMetaData));
+  std::string pack() const {
+    std::string d(sizeof(kvfsMetaData), L'\0');
+    memcpy(&d[0], this, d.size());
+    return d;
   }
 };
 

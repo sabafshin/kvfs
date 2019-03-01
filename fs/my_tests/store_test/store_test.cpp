@@ -93,28 +93,28 @@ int main() {
   };
   root_value.fstat_.st_ino = 0;
   std::cout << sizeof(kvfs_stat) << std::endl;
-  std::cout << root_value.to_string().size() << std::endl;
+  std::cout << root_value.pack().size() << std::endl;
 
   d_cache->insert(root, root_value);
   d_cache->insert(root, root_value);
   kvfsMetaData found{};
   auto foudn_bool = d_cache->find(root, found);
 //
-//  std::cout << found.to_string() << std::endl;
+//  std::cout << found.pack() << std::endl;
 
 //  ostringstream op;
 //  convert_to_hex_string(op, reinterpret_cast<const unsigned char *>(&root_value), sizeof(kvfsMetaData));
 //  string output = op.str();
 //  cout << "After conversion from struct to hex string:\n"
 //       << output << endl;
-  auto root_slice = root.to_string();
-  auto root_value_slice = root_value.to_string();
+  auto root_slice = root.pack();
+  auto root_value_slice = root_value.pack();
 //  istringstream ip(root_value_slice.data());
 //  kvfsMetaData back{};
 //  convert_to_struct(ip, reinterpret_cast<unsigned char*>(&back), sizeof(kvfsMetaData));
 //  std::cout << root_value_slice.data() << std::endl;
-//  std::cout << root_value.to_string() << std::endl;
-  bool status = store_->put(root.to_string(), root_value.to_string());
+//  std::cout << root_value.pack() << std::endl;
+  bool status = store_->put(root.pack(), root_value.pack());
 
   if (status) {
     std::cout << "root insert success." << std::endl;
@@ -136,7 +136,7 @@ int main() {
 
       std::cout << new_back.dirent_.d_name << std::endl;
       std::cout << new_back.fstat_.st_ino << std::endl;
-      std::cout << new_back.parent_key_.to_string() << std::endl;
+      std::cout << new_back.parent_key_.pack() << std::endl;
       std::cout << new_back.fstat_.st_dev << std::endl;
       std::cout << new_back.fstat_.st_ino << std::endl;
 //      std::cout << back.this_inode << std::endl;
