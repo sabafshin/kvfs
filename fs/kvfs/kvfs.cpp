@@ -943,9 +943,6 @@ int KVFS::Close(int filedes) {
 struct dirent *KVFS::ReadDir(DIR *dirstream) {
   return nullptr;
 }
-struct dirent64 *KVFS::ReadDir64(DIR *dirstream) {
-  return nullptr;
-}
 int KVFS::CloseDir(DIR *dirstream) {
   return 0;
 }

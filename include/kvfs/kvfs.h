@@ -45,7 +45,6 @@ class KVFS : public FS {
   int ChDir(const char *filename) override;
   DIR *OpenDir(const char *path) override;
   struct dirent *ReadDir(DIR *dirstream) override;
-  struct dirent64 *ReadDir64(DIR *dirstream) override;
   int CloseDir(DIR *dirstream) override;
   int Link(const char *oldname, const char *newname) override;
   int SymLink(const char *oldname, const char *newname) override;

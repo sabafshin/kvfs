@@ -97,7 +97,6 @@ class FS {
    * for instance, to copy the d_name string if you need it later.
    */
   virtual struct dirent *ReadDir(DIR *dirstream) = 0;
-  virtual struct dirent64 *ReadDir64(DIR *dirstream) = 0;
 
   /**
    * This function closes the directory stream dirstream. It returns 0 on success and -1 on failure.
