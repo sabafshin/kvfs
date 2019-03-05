@@ -17,8 +17,6 @@
 #include <store/store_entry.h>
 #include <store/store_result.h>
 
-#include <rocksdb/utilities/transaction.h>
-#include <rocksdb/utilities/transaction_db.h>
 #include <rocksdb/db.h>
 
 namespace kvfs {
@@ -43,6 +41,7 @@ class RocksDBStore : public Store {
 
   std::vector<StoreResult> get_children(const std::string &key) override;
   StoreResult get_parent(const std::string &key) override;
+  StoreResult get_next(const std::string &key_, const uint64_t &prefix_) override;
 
   bool hasKey(const std::string &key) const override;
 

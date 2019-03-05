@@ -79,29 +79,8 @@ int kvfs::KVFS::ChDir(const char *filename) {
 
   return 0;
 }
-DIR *kvfs::KVFS::OpenDir(const char *path) {
-  kvfsDirKey key;
-  if (!CheckNameLength(path)) {
-    throw FSError(FSErrorType::FS_EINVAL, "Given path name does not comply with POSIX standards");
-  }
-  if (!Lookup(path, &key)) {
-    errorno_ = -ENONET;
-    throw FSError(FSErrorType::FS_ENOENT, "No such file or directory");
-  }
-
-  DIR *result;
-
-  InodeCacheEntry cache_entry_;
-  bool status = inode_cache_->get(key, INODE_READ, cache_entry_);
-  if (status) {
-
-  }
-
-  return nullptr;
-}
-int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
-  std::filesystem::path orig_ = std::filesystem::path(filename);
-//  std::cout << orig_ << std::endl;
+kvfsDIR *KVFS::OpenDir(const char *path) {
+  auto orig_ = std::filesystem::path(path);
   if (orig_.is_relative()) {
     // make it absolute
     orig_ = pwd_.append(orig_.string());
@@ -114,7 +93,75 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
   }
 
   // Attemp to resolve the real path from given path
-  std::filesystem::path resolved_path_ = ResolvePath(orig_);
+  auto resolved_path_ = ResolvePath(orig_);
+
+  // lock
+  mutex_->lock();
+
+  kvfsDirKey key = {current_key_.inode_, std::filesystem::hash_value(resolved_path_.filename())};
+  const string &key_str = key.pack();
+
+  if (!store_->hasKey(key_str)) {
+    // does not exist return error
+    errorno_ = -ENONET;
+    throw FSError(FSErrorType::FS_ENOENT, "A component of dirname does not name an existing directory "
+                                          "or dirname is an empty string.");
+  }
+  auto sr = store_->get(key_str);
+  if (sr.isValid()) {
+    kvfsMetaData md_;
+    md_.parse(sr);
+
+    // check if it is a directory
+    if (!S_ISDIR(md_.fstat_.st_mode)) {
+      errorno_ = -ENOTDIR;
+      throw FSError(FSErrorType::FS_ENOTDIR, "A component of dirname names an existing file that "
+                                             "is neither a directory nor a symbolic link to a directory.");
+    }
+
+    // insert it into open_fds
+    auto fd_ = FreeFD();
+    auto fh_ = kvfsFileHandle();
+    fh_.md_ = md_;
+    fh_.key_ = key;
+
+    open_fds_->insert(fd_, fh_);
+
+    // set current key to this one
+    current_key_ = key;
+    current_stat_ = md_.fstat_;
+
+    cwd_name_.append(md_.dirent_.d_name);
+    pwd_.append(resolved_path_.filename().string());
+
+    //unlock
+    mutex_->unlock();
+
+    //success
+    auto *result = new kvfsDIR();
+    result->file_descriptor_ = fd_;
+    result->offset_ = 0;
+    return result;
+  }
+
+  mutex_->unlock();
+  return nullptr;
+}
+int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
+  auto orig_ = std::filesystem::path(filename);
+  if (orig_.is_relative()) {
+    // make it absolute
+    orig_ = pwd_.append(orig_.string());
+  }
+  if (orig_.is_absolute()) {
+    // must start with single "/"
+    if (orig_.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
+
+  // Attemp to resolve the real path from given path
+  auto resolved_path_ = ResolvePath(orig_);
 
 //  std::cout << resolved_path_ << std::endl;
 
@@ -292,14 +339,14 @@ bool kvfs::KVFS::CheckNameLength(const std::filesystem::path &path) {
 }
 void kvfs::KVFS::BuildKey(std::basic_string<char> basic_string,
                           const int i,
-                          kvfs::kvfs_file_inode_t search,
+                          kvfs_file_inode_t search,
                           kvfs::kvfsDirKey *key) {
 
 }
 
 bool kvfs::KVFS::ParentLookup(const char *buffer,
                               kvfs::kvfsDirKey *key,
-                              kvfs::kvfs_file_inode_t search,
+                              kvfs_file_inode_t search,
                               const char *lastdelimiter) {
   /*const char *lpos = buffer;
   const char *rpos;
@@ -422,7 +469,7 @@ std::filesystem::path kvfs::KVFS::GetSymLinkRealPath(const kvfs::kvfsMetaData &d
 bool kvfs::KVFS::starts_with(const std::string &s1, const std::string &s2) {
   return s2.size() <= s1.size() && s1.compare(0, s2.size(), s2) == 0;
 }
-kvfs::kvfs_file_inode_t kvfs::KVFS::FreeInode() {
+kvfs_file_inode_t kvfs::KVFS::FreeInode() {
   kvfs_file_inode_t fi = super_block_.next_free_inode_;
   ++super_block_.next_free_inode_;
   ++super_block_.total_inode_count_;
@@ -437,11 +484,11 @@ bool kvfs::KVFS::FreeUpBlock(const kvfsBlockKey &key) {
   mutex_->lock();
   if (super_block_.freeblocks_count_ < 512) {
     // add it to first freeblocks block
-    FreeBlocksKey fb_key = {"fb", 0};
+    kvfsFreeBlocksKey fb_key = {"fb", 0};
     if (store_->hasKey(fb_key.pack())) {
       auto sr = store_->get(fb_key.pack());
       if (sr.isValid()) {
-        FreeBlocksValue value{};
+        kvfsFreeBlocksValue value{};
         value.parse(sr);
         value.blocks[value.count_] = key;
         ++value.count_;
@@ -453,7 +500,7 @@ bool kvfs::KVFS::FreeUpBlock(const kvfsBlockKey &key) {
         if (value.count_ == 512) {
           // generate next fb_block
           ++fb_key.number_;
-          FreeBlocksValue fb_value{};
+          kvfsFreeBlocksValue fb_value{};
           status = store_->put(fb_key.pack(), fb_value.pack());
           if (!status) {
             throw FSError(FSErrorType::FS_EIO, "Failed to perform IO in the store");
@@ -462,7 +509,7 @@ bool kvfs::KVFS::FreeUpBlock(const kvfsBlockKey &key) {
       }
     } else {
       // generate the first fb block
-      FreeBlocksValue value{};
+      kvfsFreeBlocksValue value{};
       value.count_ = 1;
       ++super_block_.freeblocks_count_;
       value.blocks[0] = key;
@@ -476,8 +523,8 @@ bool kvfs::KVFS::FreeUpBlock(const kvfsBlockKey &key) {
   } else {
     // fb count is >= 512
     uint64_t number = super_block_.freeblocks_count_ / 512;
-    FreeBlocksKey fb_key = {"fb", number};
-    FreeBlocksValue fb_value{};
+    kvfsFreeBlocksKey fb_key = {"fb", number};
+    kvfsFreeBlocksValue fb_value{};
     fb_value.blocks[fb_value.count_] = key;
     ++fb_value.count_;
     ++super_block_.freeblocks_count_;
@@ -488,7 +535,7 @@ bool kvfs::KVFS::FreeUpBlock(const kvfsBlockKey &key) {
     if (fb_value.count_ == 512) {
       // generate next fb_block
       ++fb_key.number_;
-      FreeBlocksValue fb_value{};
+      kvfsFreeBlocksValue fb_value{};
       status = store_->put(fb_key.pack(), fb_value.pack());
       if (!status) {
         throw FSError(FSErrorType::FS_EIO, "Failed to perform IO in the store");
@@ -653,6 +700,8 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
           mutex_->lock();
           blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
           store_->put(prv_blk_.pack(), blck_v.pack());
+          mutex_->unlock();
+
         }
         mutex_->unlock();
 
@@ -703,6 +752,8 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
             blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
             store_->put(prv_blk_.pack(), blck_v.pack());
 //            buffer = static_cast<const byte *>(buffer) + KVFS_DEF_BLOCK_SIZE_4K;
+            mutex_->unlock();
+
           }
         }
         mutex_->lock();
@@ -791,6 +842,8 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
             mutex_->lock();
             blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
             store_->put(prv_blk_.pack(), blck_v.pack());
+            mutex_->unlock();
+
           }
           mutex_->unlock();
 
@@ -844,6 +897,7 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
               blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
               store_->put(prv_blk_.pack(), blck_v.pack());
 //              buffer = static_cast<const byte *>(buffer) + KVFS_DEF_BLOCK_SIZE_4K;
+              mutex_->unlock();
             }
           }
           mutex_->lock();
@@ -875,10 +929,10 @@ kvfs::kvfsBlockKey kvfs::KVFS::GetFreeBlock() {
   mutex_->lock();
   if (super_block_.freeblocks_count_ != 0) {
     auto fb_number = super_block_.freeblocks_count_ / 512;
-    FreeBlocksKey fb_key = {"fb", fb_number};
+    kvfsFreeBlocksKey fb_key = {"fb", fb_number};
     auto sr = store_->get(fb_key.pack());
     if (sr.isValid()) {
-      FreeBlocksValue val{};
+      kvfsFreeBlocksValue val{};
       val.parse(sr);
       auto key = val.blocks[val.count_ - 1];
 
@@ -937,14 +991,113 @@ int KVFS::Close(int filedes) {
     // success
     return 0;
   } catch (...) {
-    throw FSError(FSErrorType::FS_EIO, "Failed to close the given file descriptor");
+    errorno_ = -EINTR;
+    throw FSError(FSErrorType::FS_EINTR, "The close() function was interrupted by a signal.");
   }
 }
-struct dirent *KVFS::ReadDir(DIR *dirstream) {
-  return nullptr;
+kvfs_dirent *KVFS::ReadDir(kvfsDIR *dirstream) {
+  // check if the fd is in open_fds
+  mutex_->lock();
+  kvfsFileHandle fh_;
+
+  if (!dirstream) {
+    errorno_ = -EINVAL;
+    throw FSError(FSErrorType::FS_EINVAL, "The dirp argument is a nullptr");
+  }
+
+  if (!open_fds_->find(dirstream->file_descriptor_, fh_)) {
+    errorno_ = -EBADFD;
+    throw FSError(FSErrorType::FS_EBADF, "The dirp argument does not refer to an open directory stream.");
+  }
+  try {
+    // start from offset on dirstream
+    // for each dirsteam get next one using get_next from prefix.
+    if (dirstream->offset_ == 0) {
+      // first time so set it up
+      dirstream->prefix = fh_.key_.inode_;
+
+      auto sr = store_->get_next(fh_.key_.pack(), fh_.key_.inode_);
+      if (sr.isValid()) {
+        kvfsMetaData next_md_;
+        next_md_.parse(sr);
+
+        auto result = new kvfs_dirent();
+        *result = next_md_.dirent_;
+        result->d_ino = next_md_.fstat_.st_ino;
+
+        // update offset
+        // generate key
+        kvfsDirKey key = {fh_.key_.inode_, std::filesystem::hash_value(next_md_.dirent_.d_name)};
+        dirstream->from_ = key.pack();
+        ++dirstream->offset_;
+
+        // success
+        return result;
+      } else {
+        // something went wrong
+        throw std::exception();
+      }
+    } else {
+      // already readdir before
+
+      auto sr = store_->get_next(dirstream->from_, dirstream->prefix);
+      if (sr.isValid()) {
+        kvfsMetaData next_md_;
+        next_md_.parse(sr);
+
+        auto result = new kvfs_dirent();
+        *result = next_md_.dirent_;
+        result->d_ino = next_md_.fstat_.st_ino;
+
+        // update offset
+        // generate key
+        kvfsDirKey key = {fh_.key_.inode_, std::filesystem::hash_value(next_md_.dirent_.d_name)};
+        dirstream->from_ = key.pack();
+        ++dirstream->offset_;
+
+        // success
+        return result;
+      } else {
+        // something went wrong
+        throw std::exception();
+      }
+    }
+  } catch (...) {
+    errorno_ = -EINTR;
+    throw FSError(FSErrorType::FS_EINTR, "The ReadDir() function was interrupted by a signal.");
+  }
 }
-int KVFS::CloseDir(DIR *dirstream) {
-  return 0;
+int KVFS::CloseDir(kvfsDIR *dirstream) {
+  // check if the fd is in open_fds
+  mutex_->lock();
+  kvfsFileHandle fh_;
+
+  if (!dirstream) {
+    errorno_ = -EINVAL;
+    throw FSError(FSErrorType::FS_EINVAL, "The dirp argument is a nullptr");
+  }
+
+  if (!open_fds_->find(dirstream->file_descriptor_, fh_)) {
+    errorno_ = -EBADFD;
+    throw FSError(FSErrorType::FS_EBADF, "The dirp argument does not refer to an open directory stream.");
+  }
+  try {
+    // update store
+    store_->merge(fh_.key_.pack(), fh_.md_.pack());
+
+    store_->sync();
+
+    // release it from open_fds
+    open_fds_->evict(dirstream->file_descriptor_);
+    // success
+    delete dirstream;
+
+    mutex_->unlock();
+    return 0;
+  } catch (...) {
+    errorno_ = -EINTR;
+    throw FSError(FSErrorType::FS_EINTR, "The closedir() function was interrupted by a signal.");
+  }
 }
 int KVFS::Link(const char *oldname, const char *newname) {
   return 0;
@@ -968,6 +1121,40 @@ int KVFS::Rename(const char *oldname, const char *newname) {
   return 0;
 }
 int KVFS::MkDir(const char *filename, mode_t mode) {
+  auto orig_ = std::filesystem::path(filename);
+  if (orig_.is_relative()) {
+    // make it absolute
+    orig_ = pwd_.append(orig_.string());
+  }
+  if (orig_.is_absolute()) {
+    // must start with single "/"
+    if (orig_.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
+
+  // Attemp to resolve the real path from given path
+  auto resolved_path_ = ResolvePath(orig_);
+
+  // TODO: mkdir permission bits not implemented
+
+  kvfsDirKey key = {current_key_.inode_, std::filesystem::hash_value(resolved_path_.filename())};
+  const string &key_str = key.pack();
+  // lock
+  mutex_->lock();
+  if (store_->hasKey(key_str)) {
+    // exists return error
+    errorno_ = -EEXIST;
+    mutex_->unlock();
+    throw FSError(FSErrorType::FS_EEXIST, "The named file exists.");
+  }
+  auto md_ = kvfsMetaData(resolved_path_.filename(), FreeInode(), mode, current_key_);
+  // update store
+  md_.fstat_.st_mode |= S_IFDIR;
+
+  store_->put(key_str, md_.pack());
+  //unlock
+  mutex_->unlock();
   return 0;
 }
 int KVFS::Stat(const char *filename, struct stat *buf) {
@@ -993,7 +1180,7 @@ int KVFS::FSync(int fildes) {
 ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
   return 0;
 }
-ssize_t KVFS::pwrite(int filedes, const void *buffer, size_t size, off_t offset) {
+ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset) {
   return 0;
 }
 int KVFS::ChMod(const char *filename, mode_t mode) {
@@ -1019,6 +1206,23 @@ void KVFS::TuneFS() {
 void KVFS::DestroyFS() {
   if (!store_->destroy()) {
     throw FSError(FSErrorType::FS_EIO, "Failed to destroy store");
+  }
+  store_.reset();
+  inode_cache_.reset();
+  open_fds_.reset();
+
+  std::filesystem::remove_all(root_path);
+
+}
+uint32_t KVFS::FreeFD() {
+  if (next_free_fd_ == KVFS_MAX_OPEN_FILES) {
+    // error too many open files
+    errorno_ = -ENFILE;
+    throw FSError(FSErrorType::FS_ENFILE, "Too many files are currently open in the system.");
+  } else {
+    auto fi = next_free_fd_;
+    ++next_free_fd_;
+    return fi;
   }
 }
 }  // namespace kvfs

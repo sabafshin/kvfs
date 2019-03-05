@@ -20,27 +20,27 @@
 #include <ctime>
 #include <fcntl.h>
 #include <zconf.h>
+#include <kvfs/kvfs_dirent.h>
 
 namespace kvfs {
 enum class StoreEntryType : uint8_t {
   DATA_KEY, F_KEY
 };
 
-typedef size_t kvfs_file_hash_t;
-typedef unsigned char byte;
-#ifdef __USE_LARGEFILE64
-typedef struct dirent64 kvfs_dirent;
-typedef struct stat64 kvfs_stat;
-typedef ino64_t kvfs_file_inode_t;
-#else
-typedef struct dirent kvfs_dirent;
-typedef ino_t kvfs_file_inode_t;
-typedef struct stat kvfs_stat;
-#endif
+
 
 struct kvfsDirKey {
   kvfs_file_inode_t inode_;
   kvfs_file_hash_t hash_;
+
+  void parse(const std::string &sr) {
+    auto bytes = sr.data();
+    if (sr.size() != sizeof(kvfsDirKey)) {
+      throw std::invalid_argument("Bad size");
+    }
+    auto *idx = bytes;
+    memcpy(this, idx, sizeof(kvfsDirKey));
+  }
 
   std::string pack() const {
     std::string d(sizeof(kvfsDirKey), L'\0');
@@ -99,7 +99,7 @@ struct kvfsMetaData {
   kvfsMetaData(const std::string &name,
                const kvfs_file_inode_t &inode,
                const mode_t &mode,
-               const kvfsDirKey &current_key_) {
+               const kvfsDirKey &parent) {
     name.copy(dirent_.d_name, name.length());
     // get a free inode for this new file
     dirent_.d_ino = inode;
@@ -121,7 +121,7 @@ struct kvfsMetaData {
     fstat_.st_blocks = 0;
     fstat_.st_size = 0;
     // set parent
-    parent_key_ = current_key_;
+    parent_key_ = parent;
   }
   
   void parse(const kvfs::StoreResult &result) {

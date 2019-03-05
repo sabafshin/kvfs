@@ -51,6 +51,9 @@ FSError::FSError
     case FSErrorType::FS_EFTYPE:full_msg_ += "(EFTYPE) ";
       break;
     case FSErrorType::FS_ENAMETOOLONG:full_msg_ += "(ENAMETOOLONG) ";
+      break;
+    case FSErrorType::FS_ENFILE:full_msg_ += "(ENFILE) ";
+      break;
   }
 
   full_msg_ += "(" + msg_ + ")";

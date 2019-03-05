@@ -19,12 +19,13 @@ int main() {
   int flags = O_CREAT;
   flags |= O_WRONLY;
   mode_t mode = geteuid();
-  std::string file_name = "../..////./Hello.txt";
+//  std::string file_name = "../..////./Hi.txt";
+  std::string file_name = "Hi.txt";
 
   int fd_ = fs_->Open(file_name.c_str(), flags, mode);
   std::cout << fd_ << std::endl;
 
-  size_t data_size = 12000;
+  size_t data_size = 20000;
   std::cout << data_size << std::endl;
 
   random_bytes_engine rbe;

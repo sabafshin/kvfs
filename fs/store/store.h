@@ -35,6 +35,8 @@ class Store {
 
   virtual StoreResult get_parent(const std::string &key) = 0;
 
+  virtual StoreResult get_next(const std::string &key_, const uint64_t &prefix_) = 0;
+
   virtual bool sync() = 0;
 
   virtual void close() = 0;

@@ -64,6 +64,7 @@ set(
     KVFS_SRCS
     fs/kvfs/kvfs.cpp
     fs/kvfs/fs_error.cpp fs/kvfs/fs_error.h)
+
 source_group("Source Files" FILES ${KVFS_SRCS})
 
 set(
@@ -71,7 +72,9 @@ set(
     include/kvfs/kvfs.h
     include/kvfs/fs.h
     fs/kvfs/fs_error.cpp
-    fs/kvfs/fs_error.h)
+    fs/kvfs/fs_error.h
+    fs/kvfs/super.h fs/kvfs/kvfs_dirent.h)
+
 source_group("Header Files" FILES ${KVFS_HEADERS})
 
 add_library(

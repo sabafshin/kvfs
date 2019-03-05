@@ -15,6 +15,8 @@
 #include <dirent.h>
 #include <sys/types.h>
 
+#include <kvfs/kvfs_dirent.h>
+
 /**
  * Use this abstract class to create an instance of KVFS
  * Example:
@@ -83,7 +85,7 @@ class FS {
     * @param path file name
     * @return If unsuccessful, opendir returns a null pointer.
     */
-  virtual DIR *OpenDir(const char *path) = 0;
+  virtual kvfsDIR *OpenDir(const char *path) = 0;
 
   /**
    * This function reads the next entry from the directory.
@@ -96,16 +98,16 @@ class FS {
    * The data in that buffer will be overwritten by the next call to readdir. You must take care,
    * for instance, to copy the d_name string if you need it later.
    */
-  virtual struct dirent *ReadDir(DIR *dirstream) = 0;
+  virtual kvfs_dirent *ReadDir(kvfsDIR *dirstream) = 0;
 
   /**
    * This function closes the directory stream dirstream. It returns 0 on success and -1 on failure.
    * The following errno error conditions are defined for this function:
    * EBADF
    *    The dirstream argument is not valid.
-   * @param dirstream
+   * @param filedes
    */
-  virtual int CloseDir(DIR *dirstream) = 0;
+  virtual int CloseDir(kvfsDIR *filedes) = 0;
 
   /**
    * The link function makes a new link to the existing file named by oldname, under the new name newname.
@@ -723,7 +725,7 @@ ESPIPE
     The file descriptor filedes is associated with a pipe or a FIFO and this device does not allow positioning of the file pointer.
 
    */
-  virtual ssize_t pwrite(int filedes, const void *buffer, size_t size, off_t offset) = 0;
+  virtual ssize_t PWrite(int filedes, const void *buffer, size_t size, off_t offset) = 0;
 
   virtual void DestroyFS() = 0;
 };

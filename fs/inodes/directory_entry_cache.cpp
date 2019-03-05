@@ -32,10 +32,11 @@ void kvfs::DentryCache::insert(const int &filedes, kvfs::kvfsFileHandle &value) 
   Entry ent(filedes, value);
   cache_.push_front(ent);
   lookup_[filedes] = cache_.begin();
-  if (cache_.size() > maxsize_) {
+  // not an lru cache
+  /*if (cache_.size() > maxsize_) {
     lookup_.erase(cache_.back().first);
     cache_.pop_back();
-  }
+  }*/
   mutex_->unlock();
 }
 void kvfs::DentryCache::evict(const int &filedes) {

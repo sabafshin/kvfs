@@ -8,7 +8,6 @@
  */
 
 #include <kvfs_rocksdb/rocksdb_store.h>
-#include <kvfs_rocksdb/rocksdb_hash.h>
 #include <inodes/inode_cache.h>
 #include <inodes/directory_entry_cache.h>
 #include <iostream>
@@ -77,7 +76,7 @@ int main() {
   kvfsDirKey root{};
   auto seed = static_cast<uint32_t>(std::rand());
   root.inode_ = 0;
-  root.hash_ = kvfs::XXH32(name.data(), static_cast<int>(name.size()), seed);
+//  root.hash_ = kvfs::XXH32(name.data(), static_cast<int>(name.size()), seed);
 
   std::cout << root.hash_ << std::endl;
 

@@ -77,6 +77,7 @@ vector<StoreResult> RocksDBStore::get_children(const std::string &key) {
       result.emplace_back(StoreResult(value.data()));
     }
 
+    delete (iter);
     return result;
   }
 
@@ -198,6 +199,24 @@ std::unique_ptr<Store::WriteBatch> RocksDBStore::beginWrite(size_t buf_size) {
 bool RocksDBStore::destroy() {
   rocksdb::DestroyDB(this->db_handle->db->GetName(), db_handle->db->GetOptions());
   return true;
+}
+StoreResult RocksDBStore::get_next(const std::string &key_, const uint64_t &prefix_) {
+  auto iter = db_handle->db->NewIterator(ReadOptions());
+  iter->Seek(key_);
+  if (!iter->Valid()) {
+    delete (iter);
+    return StoreResult();
+  }
+  iter->Next();
+  kvfsDirKey dirKey;
+  dirKey.parse(iter->key().ToString());
+  if (dirKey.inode_ == prefix_) {
+    delete (iter);
+    return StoreResult(iter->value().ToString());
+  };
+  delete (iter);
+  // not found
+  return StoreResult();
 }
 
 }//namespace kvfs

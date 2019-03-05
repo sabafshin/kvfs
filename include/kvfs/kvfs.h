@@ -43,9 +43,9 @@ class KVFS : public FS {
   char *GetCWD(char *buffer, size_t size) override;
   char *GetCurrentDirName() override;
   int ChDir(const char *filename) override;
-  DIR *OpenDir(const char *path) override;
-  struct dirent *ReadDir(DIR *dirstream) override;
-  int CloseDir(DIR *dirstream) override;
+  kvfsDIR *OpenDir(const char *path) override;
+  kvfs_dirent *ReadDir(kvfsDIR *dirstream) override;
+  int CloseDir(kvfsDIR *dirstream) override;
   int Link(const char *oldname, const char *newname) override;
   int SymLink(const char *oldname, const char *newname) override;
   ssize_t ReadLink(const char *filename, char *buffer, size_t size) override;
@@ -75,20 +75,20 @@ class KVFS : public FS {
   void Sync() override;
   int FSync(int fildes) override;
   ssize_t PRead(int filedes, void *buffer, size_t size, off_t offset) override;
-  ssize_t pwrite(int filedes, const void *buffer, size_t size, off_t offset) override;
+  ssize_t PWrite(int filedes, const void *buffer, size_t size, off_t offset) override;
   void DestroyFS() override;
  private:
   std::filesystem::path root_path;
   std::shared_ptr<Store> store_;
   std::unique_ptr<InodeCache> inode_cache_;
   std::unique_ptr<DentryCache> open_fds_;
-  SuperBlock super_block_{};
+  kvfsSuperBlock super_block_{};
   int8_t errorno_;
   std::filesystem::path cwd_name_;
   std::filesystem::path pwd_;
-  kvfs_stat current_stat_;
-  kvfsDirKey current_key_;
-  int next_free_fd_;
+  kvfs_stat current_stat_{};
+  kvfsDirKey current_key_{};
+  uint32_t next_free_fd_{};
   std::unique_ptr<std::mutex> mutex_;
   // Private Methods
  private:
@@ -103,7 +103,8 @@ class KVFS : public FS {
   kvfs_file_inode_t FreeInode();
   bool FreeUpBlock(const kvfsBlockKey &key);
   kvfsBlockKey GetFreeBlock();
-
+  uint32_t FreeFD();
 };
+
 }  // namespace kvfs
 #endif //KVFS_FILESYSTEM_H

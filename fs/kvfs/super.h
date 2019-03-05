@@ -15,7 +15,7 @@
 #include "store/store_entry.h"
 
 namespace kvfs {
-struct SuperBlock {
+struct kvfsSuperBlock {
   uint64_t next_free_inode_;
   uint64_t total_inode_count_;
   uint64_t total_block_count_;
@@ -30,47 +30,47 @@ struct SuperBlock {
 
   void parse(const StoreResult &sr) {
     auto bytes_ = sr.asString();
-    if (bytes_.size() != sizeof(SuperBlock)) {
+    if (bytes_.size() != sizeof(kvfsSuperBlock)) {
       throw std::invalid_argument("Bad size");
     }
     auto *idx = bytes_.data();
-    memmove(this, idx, sizeof(SuperBlock));
+    memmove(this, idx, sizeof(kvfsSuperBlock));
   }
   std::string pack() const {
-    std::string d(sizeof(SuperBlock), L'\0');
+    std::string d(sizeof(kvfsSuperBlock), L'\0');
     memcpy(&d[0], this, d.size());
     return d;
   }
 };
 
-struct FreeBlocksKey {
+struct kvfsFreeBlocksKey {
   char name[3];
   uint64_t number_;
 
   std::string pack() const {
-    std::string d(sizeof(FreeBlocksKey), L'\0');
+    std::string d(sizeof(kvfsFreeBlocksKey), L'\0');
     memcpy(&d[0], this, d.size());
     return d;
   }
 };
-struct FreeBlocksValue {
-  FreeBlocksKey next_key_;
+struct kvfsFreeBlocksValue {
+  kvfsFreeBlocksKey next_key_;
   uint32_t count_;
   kvfsBlockKey blocks[512];
 
   std::string pack() const {
-    std::string d(sizeof(FreeBlocksValue), L'\0');
+    std::string d(sizeof(kvfsFreeBlocksValue), L'\0');
     memcpy(&d[0], this, d.size());
     return d;
   }
 
   void parse(const StoreResult &sr) {
     auto bytes_ = sr.asString();
-    if (bytes_.size() != sizeof(FreeBlocksValue)) {
+    if (bytes_.size() != sizeof(kvfsFreeBlocksValue)) {
       throw std::invalid_argument("Bad size");
     }
     auto *idx = bytes_.data();
-    memmove(this, idx, sizeof(FreeBlocksValue));
+    memmove(this, idx, sizeof(kvfsFreeBlocksValue));
   }
 };
 

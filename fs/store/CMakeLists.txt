@@ -19,7 +19,8 @@ set(STORE_HEADERS
     store.h
     store_entry.h
     store_result.h
-    store_hash.h ../kvfs/super.h)
+    #    store_hash.h
+    )
 
 source_group(" Header Files " FILES ${STORE_HEADERS})
 

@@ -33,7 +33,8 @@ enum class FSErrorType : uint8_t {
   FS_EBUSY,
   FS_EISDIR,
   FS_EFTYPE,
-  FS_ENAMETOOLONG
+  FS_ENAMETOOLONG,
+  FS_ENFILE
 };
 
 class FSError : public std::exception {
