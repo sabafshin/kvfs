@@ -86,7 +86,7 @@ class KVFS : public FS {
   int8_t errorno_;
   std::filesystem::path cwd_name_;
   std::filesystem::path pwd_;
-  kvfs_stat current_stat_{};
+  kvfsMetaData current_md_{};
   kvfsDirKey current_key_{};
   uint32_t next_free_fd_{};
   std::unique_ptr<std::mutex> mutex_;

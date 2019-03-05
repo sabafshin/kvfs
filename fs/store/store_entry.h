@@ -87,6 +87,7 @@ struct kvfsBlockValue {
 struct kvfsMetaData {
   kvfs_dirent dirent_{};
   kvfsDirKey parent_key_{};
+  kvfs_off_t children_offset_{};
   kvfs_stat fstat_{};
   kvfsBlockKey first_block_key_{};
   kvfsBlockKey last_block_key_{};

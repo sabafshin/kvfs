@@ -7,6 +7,7 @@
  *      File:   rocksdb_store.cpp
  */
 
+#include <iostream>
 #include "rocksdb_store.h"
 
 using std::vector;
@@ -200,20 +201,26 @@ bool RocksDBStore::destroy() {
   rocksdb::DestroyDB(this->db_handle->db->GetName(), db_handle->db->GetOptions());
   return true;
 }
-StoreResult RocksDBStore::get_next(const std::string &key_, const uint64_t &prefix_) {
+StoreResult RocksDBStore::get_next(const std::string &key_, const uint64_t &prefix_, const kvfs_off_t &offset) {
   auto iter = db_handle->db->NewIterator(ReadOptions());
-  iter->Seek(key_);
-  if (!iter->Valid()) {
-    delete (iter);
-    return StoreResult();
+  for (iter->Seek(key_); iter->Valid() /*&& iter->key().starts_with(prfx.pack())*/; iter->Next()) {
+    auto key_str = iter->key().ToString();
+    auto value_str = iter->value().ToString();
+//    std::cout <<  << std::endl;
+//    std::cout << iter->key().size() << std::endl;
+//    std::cout << sizeof(kvfsDirKey) << std::endl;
+    if (iter->key().size() == sizeof(kvfsDirKey)) {
+      kvfsDirKey key{};
+      key.parse(key_str);
+      kvfsMetaData md_;
+      md_.parse(StoreResult(std::string(value_str)));
+      if (key.inode_ == prefix_ && md_.dirent_.d_off == offset) {
+        delete iter;
+        return StoreResult(std::string(value_str));
+      }
+//      --offset;
+    }
   }
-  iter->Next();
-  kvfsDirKey dirKey;
-  dirKey.parse(iter->key().ToString());
-  if (dirKey.inode_ == prefix_) {
-    delete (iter);
-    return StoreResult(iter->value().ToString());
-  };
   delete (iter);
   // not found
   return StoreResult();

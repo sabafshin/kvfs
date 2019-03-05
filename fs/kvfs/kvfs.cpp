@@ -18,7 +18,7 @@ kvfs::KVFS::KVFS(const std::string &mount_path)
       pwd_("/"),
       errorno_(0),
       current_key_{},
-      current_stat_{},
+      current_md_{},
       next_free_fd_(0),
       mutex_(std::make_unique<std::mutex>()) {
   FSInit();
@@ -32,7 +32,7 @@ kvfs::KVFS::KVFS()
       pwd_("/"),
       errorno_(0),
       current_key_{},
-      current_stat_{},
+      current_md_{},
       next_free_fd_(0),
       mutex_(std::make_unique<std::mutex>()) {
   FSInit();
@@ -83,7 +83,9 @@ kvfsDIR *KVFS::OpenDir(const char *path) {
   auto orig_ = std::filesystem::path(path);
   if (orig_.is_relative()) {
     // make it absolute
+    auto prv_ = pwd_;
     orig_ = pwd_.append(orig_.string());
+    pwd_ = prv_;
   }
   if (orig_.is_absolute()) {
     // must start with single "/"
@@ -129,10 +131,11 @@ kvfsDIR *KVFS::OpenDir(const char *path) {
 
     // set current key to this one
     current_key_ = key;
-    current_stat_ = md_.fstat_;
+    current_md_ = md_;
 
     cwd_name_.append(md_.dirent_.d_name);
     pwd_.append(resolved_path_.filename().string());
+
 
     //unlock
     mutex_->unlock();
@@ -151,7 +154,9 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
   auto orig_ = std::filesystem::path(filename);
   if (orig_.is_relative()) {
     // make it absolute
+    auto prv_ = pwd_;
     orig_ = pwd_.append(orig_.string());
+    pwd_ = prv_;
   }
   if (orig_.is_absolute()) {
     // must start with single "/"
@@ -212,6 +217,10 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
       auto md_ = kvfsMetaData(name, FreeInode(), mode, current_key_);
       // Acquire lock
       mutex_->lock();
+
+      md_.dirent_.d_off = current_md_.children_offset_;
+      ++current_md_.children_offset_;
+
       // generate a file descriptor
       auto fh_ = kvfsFileHandle(key, md_, flags);
       auto fd_ = next_free_fd_;
@@ -310,7 +319,7 @@ void kvfs::KVFS::FSInit() {
       super_block_.fs_number_of_mounts_ = 1;
       super_block_.total_block_count_ = 0;
       super_block_.total_inode_count_ = 1;
-      super_block_.next_free_inode_ = 0;
+      super_block_.next_free_inode_ = 1;
       auto status = store_->put("superblock", super_block_.pack());
       if (!status) {
         throw FSError(FSErrorType::FS_EIO, "Failed to IO with store");
@@ -1012,55 +1021,34 @@ kvfs_dirent *KVFS::ReadDir(kvfsDIR *dirstream) {
   try {
     // start from offset on dirstream
     // for each dirsteam get next one using get_next from prefix.
-    if (dirstream->offset_ == 0) {
-      // first time so set it up
-      dirstream->prefix = fh_.key_.inode_;
+    auto offset = dirstream->offset_;
+    dirstream->prefix = fh_.md_.dirent_.d_ino;
+    if (dirstream->from_.empty()) {
+      kvfsDirKey prfx{};
+      prfx.inode_ = dirstream->prefix;
+      dirstream->from_ = prfx.pack();
+    }
 
-      auto sr = store_->get_next(fh_.key_.pack(), fh_.key_.inode_);
-      if (sr.isValid()) {
-        kvfsMetaData next_md_;
-        next_md_.parse(sr);
+    auto sr = store_->get_next(dirstream->from_, dirstream->prefix, offset);
+    if (sr.isValid()) {
+      kvfsMetaData next_md_;
+      next_md_.parse(sr);
 
-        auto result = new kvfs_dirent();
-        *result = next_md_.dirent_;
-        result->d_ino = next_md_.fstat_.st_ino;
+      auto result = new kvfs_dirent();
+      *result = next_md_.dirent_;
 
-        // update offset
-        // generate key
-        kvfsDirKey key = {fh_.key_.inode_, std::filesystem::hash_value(next_md_.dirent_.d_name)};
-        dirstream->from_ = key.pack();
-        ++dirstream->offset_;
+      // update offset
+      // generate key
+      kvfsDirKey key = {fh_.key_.inode_, std::filesystem::hash_value(next_md_.dirent_.d_name)};
+      dirstream->from_ = key.pack();
+      ++dirstream->offset_;
 
-        // success
-        return result;
-      } else {
-        // something went wrong
-        throw std::exception();
-      }
+      // success
+      mutex_->unlock();
+      return result;
     } else {
-      // already readdir before
-
-      auto sr = store_->get_next(dirstream->from_, dirstream->prefix);
-      if (sr.isValid()) {
-        kvfsMetaData next_md_;
-        next_md_.parse(sr);
-
-        auto result = new kvfs_dirent();
-        *result = next_md_.dirent_;
-        result->d_ino = next_md_.fstat_.st_ino;
-
-        // update offset
-        // generate key
-        kvfsDirKey key = {fh_.key_.inode_, std::filesystem::hash_value(next_md_.dirent_.d_name)};
-        dirstream->from_ = key.pack();
-        ++dirstream->offset_;
-
-        // success
-        return result;
-      } else {
-        // something went wrong
-        throw std::exception();
-      }
+      // something went wrong
+      throw std::exception();
     }
   } catch (...) {
     errorno_ = -EINTR;
@@ -1124,7 +1112,9 @@ int KVFS::MkDir(const char *filename, mode_t mode) {
   auto orig_ = std::filesystem::path(filename);
   if (orig_.is_relative()) {
     // make it absolute
+    auto prv_ = pwd_;
     orig_ = pwd_.append(orig_.string());
+    pwd_ = prv_;
   }
   if (orig_.is_absolute()) {
     // must start with single "/"
@@ -1138,7 +1128,7 @@ int KVFS::MkDir(const char *filename, mode_t mode) {
 
   // TODO: mkdir permission bits not implemented
 
-  kvfsDirKey key = {current_key_.inode_, std::filesystem::hash_value(resolved_path_.filename())};
+  kvfsDirKey key = {current_md_.fstat_.st_ino, std::filesystem::hash_value(resolved_path_.filename())};
   const string &key_str = key.pack();
   // lock
   mutex_->lock();
@@ -1146,13 +1136,15 @@ int KVFS::MkDir(const char *filename, mode_t mode) {
     // exists return error
     errorno_ = -EEXIST;
     mutex_->unlock();
-    throw FSError(FSErrorType::FS_EEXIST, "The named file exists.");
   }
   auto md_ = kvfsMetaData(resolved_path_.filename(), FreeInode(), mode, current_key_);
   // update store
   md_.fstat_.st_mode |= S_IFDIR;
+  md_.dirent_.d_off = current_md_.children_offset_;
+  ++current_md_.children_offset_;
 
   store_->put(key_str, md_.pack());
+
   //unlock
   mutex_->unlock();
   return 0;

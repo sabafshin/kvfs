@@ -7,6 +7,9 @@
  *      File:   rocks_db_handler.cpp
  */
 
+#include <rocksdb/slice_transform.h>
+#include <rocksdb/table.h>
+#include <rocksdb/filter_policy.h>
 #include "rocksdb_handler.h"
 namespace kvfs {
 
@@ -24,6 +27,17 @@ RocksHandles::RocksHandles(string dbPath) {
   Options options;
   // Optimize RocksDB. This is the easiest way to get RocksDB to perform well.
   options.IncreaseParallelism();
+//  options.OptimizeLevelStyleCompaction();
+
+  // Enable prefix bloom for mem tables
+//  options.prefix_extractor.reset(rocksdb::NewFixedPrefixTransform(3));
+//  options.memtable_prefix_bloom_bits = 100000000;
+//  options.memtable_prefix_bloom_probes = 6;
+
+  // Enable prefix bloom for SST files
+//  rocksdb::BlockBasedTableOptions table_options = rocksdb::BlockBasedTableOptions();
+//  table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(10, true));
+//  options.table_factory.reset(NewBlockBasedTableFactory(table_options));
 
   // Create the DB if it's not already present.
   options.create_if_missing = true;

@@ -21,12 +21,31 @@ int main() {
   auto res = fs_->MkDir(dirname, mode);
   auto stream = fs_->OpenDir("myfiles");
 
-  auto res2 = fs_->MkDir("nestedFiles", mode);
+  auto res2 = fs_->MkDir("nestedFiles_1", mode);
+  fs_->MkDir("nestedFiles_2", mode);
+  fs_->MkDir("nestedFiles_3", mode);
+  fs_->MkDir("nestedFiles_4", mode);
+  fs_->MkDir("nestedFiles_5", mode);
+
+  std::cout << res << std::endl;
+
+  auto entry = fs_->ReadDir(stream);
+  std::cout << entry->d_name << std::endl;
+
+  entry = fs_->ReadDir(stream);
+  std::cout << entry->d_name << std::endl;
+
+  entry = fs_->ReadDir(stream);
+  std::cout << entry->d_name << std::endl;
+
+  entry = fs_->ReadDir(stream);
+  std::cout << entry->d_name << std::endl;
+
+  entry = fs_->ReadDir(stream);
+  std::cout << entry->d_name << std::endl;
 
   auto final = fs_->CloseDir(stream);
 
-  std::cout << res << std::endl;
-  std::cout << stream->file_descriptor_ << std::endl;
   std::cout << final << std::endl;
 
   fs_->DestroyFS();

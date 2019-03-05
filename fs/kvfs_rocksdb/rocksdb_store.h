@@ -41,7 +41,7 @@ class RocksDBStore : public Store {
 
   std::vector<StoreResult> get_children(const std::string &key) override;
   StoreResult get_parent(const std::string &key) override;
-  StoreResult get_next(const std::string &key_, const uint64_t &prefix_) override;
+  StoreResult get_next(const std::string &key_, const uint64_t &prefix_, const kvfs_off_t &offset) override;
 
   bool hasKey(const std::string &key) const override;
 

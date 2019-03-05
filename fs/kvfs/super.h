@@ -15,6 +15,7 @@
 #include "store/store_entry.h"
 
 namespace kvfs {
+
 struct kvfsSuperBlock {
   uint64_t next_free_inode_;
   uint64_t total_inode_count_;
