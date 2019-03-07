@@ -19,11 +19,12 @@
 namespace kvfs {
 
 struct kvfsFileHandle {
-  kvfsDirKey key_;
+  kvfsDirKey key_{};
   kvfsMetaData md_;
-  int flags_;
+  int flags_{};
+  kvfs_off_t offset_{};
 
-  kvfsFileHandle() {}
+  kvfsFileHandle() = default;
   kvfsFileHandle(const kvfsDirKey &key, const kvfsMetaData &md, int flags)
       : key_(key), md_(md), flags_(flags) {};
 };

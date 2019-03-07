@@ -51,8 +51,5 @@ int main() {
   fs_->DestroyFS();
   fs_.reset();
 
-  // destroy db
-//  system("rm -r /tmp/db/");
-
   return 0;
 }

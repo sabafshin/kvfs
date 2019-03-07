@@ -218,10 +218,9 @@ StoreResult RocksDBStore::get_next(const std::string &key_, const uint64_t &pref
         delete iter;
         return StoreResult(std::string(value_str));
       }
-//      --offset;
     }
   }
-  delete (iter);
+  delete iter;
   // not found
   return StoreResult();
 }

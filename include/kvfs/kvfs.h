@@ -93,10 +93,7 @@ class KVFS : public FS {
   // Private Methods
  private:
   void FSInit();
-  inline bool Lookup(const char *filename, kvfsDirKey *key);
   bool CheckNameLength(const std::filesystem::path &path);
-  inline void BuildKey(std::basic_string<char> basic_string, int i, kvfs_file_inode_t search, kvfsDirKey *key);
-  inline bool ParentLookup(const char *buffer, kvfsDirKey *key, kvfs_file_inode_t search, const char *lpos);
   std::filesystem::path ResolvePath(const std::filesystem::path &input);
   inline bool starts_with(const std::string &s1, const std::string &s2);
   std::filesystem::path GetSymLinkRealPath(const kvfsMetaData &data);

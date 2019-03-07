@@ -174,17 +174,18 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
   // check for O_CREAT flag
 
 //  InodeCacheEntry handle;
-  InodeAccessMode access_mode;
+//  InodeAccessMode access_mode;
   if ((flags & O_ACCMODE) == O_RDONLY) {
-    access_mode = INODE_READ;
+//    access_mode = INODE_READ;
   } else if ((flags & O_ACCMODE) == O_WRONLY) {
-    access_mode = INODE_WRITE;
+//    access_mode = INODE_WRITE;
   } else if ((flags & O_ACCMODE) == O_RDWR) {
-    access_mode = INODE_RW;
+//    access_mode = INODE_RW;
   } else {
     // undefined access mode flags
     return -EINVAL;
   }
+
   kvfsDirKey key = {current_key_.inode_, std::filesystem::hash_value(resolved_path_.filename())};
   const string &key_str = key.pack();
   if (flags & O_CREAT) {
@@ -287,20 +288,6 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
 
   return fd_;
 }
-bool kvfs::KVFS::Lookup(const char *buffer, kvfs::kvfsDirKey *key) {
-  const char *lpos;
-  kvfs_file_inode_t inode_in_search;
-  if (ParentLookup(buffer, key, inode_in_search, lpos)) {
-    const char *rpos = strchr(lpos, '\0');
-    if (rpos != nullptr && rpos - lpos > 1) {
-      BuildKey(std::string(lpos + 1), static_cast<const int>(rpos - lpos - 1), inode_in_search, key);
-    }
-    return true;
-  } else {
-    errorno_ = -ENOENT;
-    return false;
-  }
-}
 void kvfs::KVFS::FSInit() {
   if (store_ != nullptr) {
     mutex_->lock();
@@ -346,56 +333,12 @@ bool kvfs::KVFS::CheckNameLength(const std::filesystem::path &path) {
   }
   return true;
 }
-void kvfs::KVFS::BuildKey(std::basic_string<char> basic_string,
-                          const int i,
-                          kvfs_file_inode_t search,
-                          kvfs::kvfsDirKey *key) {
 
-}
-
-bool kvfs::KVFS::ParentLookup(const char *buffer,
-                              kvfs::kvfsDirKey *key,
-                              kvfs_file_inode_t search,
-                              const char *lastdelimiter) {
-  /*const char *lpos = buffer;
-  const char *rpos;
-  bool flag_found = true;
-  std::string item;
-  search = 0;
-  kvfsMetaData in_search;
-  while ((rpos = strchr(lpos + 1, KVFS_PATH_DELIMITER)) != nullptr) {
-    if (rpos - lpos > 0) {
-      BuildKey(std::string(lpos + 1), static_cast<const int>(rpos - lpos - 1), search, key);
-      if (!open_fds_->find(*key, in_search)) {
-        {
-          StoreResult result = store_->get(key->pack());
-          if (result.isValid()) {
-            in_search.parse(result);
-            search = in_search.fstat_.st_ino;
-            open_fds_->insert(*key, in_search);
-          } else {
-            errorno_ = -ENOENT;
-            flag_found = false;
-          }
-          if (!flag_found) {
-            return false;
-          }
-        }
-      }
-    }
-    lpos = rpos;
-  }
-  if (lpos == buffer) {
-    BuildKey("", 0, 0, key);
-  }
-  lastdelimiter = lpos;
-  return flag_found;*/
-  return 0;
-}
 std::filesystem::path kvfs::KVFS::ResolvePath(const std::filesystem::path &input) {
 //  std::cout << input << std::endl;
   std::filesystem::path output;
   kvfs_file_inode_t inode = 0;
+  int invalid_count = 0;
   // Assume the path is absolute
   for (const std::filesystem::path &e : input) {
     if (e == ".") {
@@ -437,16 +380,23 @@ std::filesystem::path kvfs::KVFS::ResolvePath(const std::filesystem::path &input
         // the path component must exists
         // otherwise we are at the end and we just append the filename
         // file name will be checked in the calling function
-        if (e != input.filename()) {
+        /*if (e != input.filename()) {
           errorno_ = -ENONET;
           throw FSError(FSErrorType::FS_ENOENT, "No such file or directory found.");
-        }
+        }*/
+        ++invalid_count;
       }
       mutex_->unlock();
     }
     // append normally
     output.append(e.string());
   }
+
+  if (invalid_count > 1) {
+    errorno_ = -ENONET;
+    throw FSError(FSErrorType::FS_ENOENT, "No such file or directory found.");
+  }
+
   return output;
 }
 std::filesystem::path kvfs::KVFS::GetSymLinkRealPath(const kvfs::kvfsMetaData &data) {
@@ -624,22 +574,40 @@ ssize_t kvfs::KVFS::Read(int filedes, void *buffer, size_t size) {
   }
 }
 ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
-  // two keys first and last, always use last key to write a new block.
-  // first get a free block, write to that block and then add it to last block
+  kvfsFileHandle fh_;
+  auto status = open_fds_->find(filedes, fh_);
+  if (!status) {
+    errorno_ = -EBADFD;
+    throw FSError(FSErrorType::FS_EBADF, "The file descriptor doesn't name a opened file, invalid fd");
+  }
+  // check flags first
+
+  if ((fh_.flags_ & O_NONBLOCK) > 0) {
+    // return without writting anything
+    errorno_ = -ECANCELED;
+    return errorno_;
+  }
+  // check if O_APPEND is set, then always append
+  bool append_only = (fh_.flags_ & O_APPEND) > 0;
+  if (append_only) {
+    // ignore offset and append only
+
+    // determine which block to write from, then
+    // pass that to blocks writer.
+
+
+  } else {
+    // call to PWrite to write from offset
+    return this->PWrite(filedes, buffer, size, fh_.offset_);
+  }
   try {
-    kvfsFileHandle fh_;
-    auto status = open_fds_->find(filedes, fh_);
-    if (!status) {
-      errorno_ = -ECANCELED;
-      return -errorno_;
-    }
     auto blocks_to_allocate_ = size / KVFS_DEF_BLOCK_SIZE_4K;
     auto nb_ = blocks_to_allocate_;
     // size left to write
     auto size_left = size;
     auto orig_buffer = buffer;
     auto orig_size = size;
-    void *idx = nullptr;
+    const void *idx = nullptr;
     mutex_->lock();
     // if inline size is not max block size, then write from that, else use last key and write from there.
     // check if inline data is not max size
@@ -649,14 +617,15 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
       // check buffer size
       if (size <= size_to_write) {
         // copy from last
-        idx = std::memcpy(&fh_.md_.inline_blck.data[fh_.md_.inline_blck.size_], buffer, size);
+//        idx = std::memcpy(&fh_.md_.inline_blck.data[fh_.md_.inline_blck.size_], buffer, size);
+        fh_.md_.inline_blck.write(buffer, size);
         // finished
 
         // update the stat
         fh_.md_.fstat_.st_blocks += blocks_to_allocate_;
         fh_.md_.fstat_.st_size += size;
         fh_.md_.fstat_.st_mtim.tv_sec = time_now;
-        fh_.md_.inline_blck.size_ = static_cast<size_t>(fh_.md_.fstat_.st_size);
+//        fh_.md_.inline_blck.size_ = static_cast<size_t>(fh_.md_.fstat_.st_size);
 
         open_fds_->insert(filedes, fh_);
 //        buffer = orig_buffer;
@@ -666,23 +635,26 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
         // write size_left from buffer
         // size is bigger than size_to_write
         // so write it all in inline
-        idx = std::memcpy(&fh_.md_.inline_blck.data[fh_.md_.inline_blck.size_], buffer, size_to_write);
-        fh_.md_.inline_blck.size_ += size_to_write;
+//        idx = std::memcpy(&fh_.md_.inline_blck.data[fh_.md_.inline_blck.size_], buffer, size_to_write);
+        fh_.md_.inline_blck.write(buffer, size_to_write);
+//        fh_.md_.inline_blck.size_ += size_to_write;
 
         // go up the index
 //        buffer = static_cast<const byte *>(buffer) + size_to_write;
-        // get a free block
-        mutex_->unlock();
-        auto blck_key = GetFreeBlock();
-        mutex_->lock();
+
         kvfsBlockValue blck_v{};
-        fh_.md_.inline_blck.next_block_ = blck_key;
         size_left -= size_to_write;
         // write upto blck size from buffer then loop for the rest
         if (size_left <= KVFS_DEF_BLOCK_SIZE_4K) {
+          // get a free block
+          mutex_->unlock();
+          auto blck_key = GetFreeBlock();
+          mutex_->lock();
+          fh_.md_.inline_blck.next_block_ = blck_key;
 //          std::memcpy(&blck_v.data[0], buffer, size_left);
-          idx = std::memcpy(&blck_v.data[0], idx, size_left);
-          blck_v.size_ = size_left;
+//          idx = std::memcpy(&blck_v.data[0], idx, size_left);
+//          blck_v.size_ = size_left;
+          idx = blck_v.write(buffer, size_left);
           // finished
           store_->put(blck_key.pack(), blck_v.pack());
 
@@ -700,17 +672,23 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
 
         } else {
 //          std::memcpy(&blck_v.data[0], buffer, KVFS_DEF_BLOCK_SIZE_4K);
-          idx = std::memcpy(&blck_v.data[0], idx, KVFS_DEF_BLOCK_SIZE_4K);
-          size_left -= KVFS_DEF_BLOCK_SIZE_4K;
+          // get a free block
           mutex_->unlock();
+          auto blck_key = GetFreeBlock();
+          mutex_->lock();
+
+//          idx = std::memcpy(&blck_v.data[0], idx, KVFS_DEF_BLOCK_SIZE_4K);
+          blck_v.write(idx, KVFS_DEF_BLOCK_SIZE_4K);
+          size_left -= KVFS_DEF_BLOCK_SIZE_4K;
+          /*mutex_->unlock();
           auto prv_blk_ = blck_key;
           blck_key = GetFreeBlock();
           blck_v.next_block_ = blck_key;
           mutex_->lock();
+          */
           blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
-          store_->put(prv_blk_.pack(), blck_v.pack());
+          store_->put(blck_key.pack(), blck_v.pack());
           mutex_->unlock();
-
         }
         mutex_->unlock();
 
@@ -718,18 +696,19 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
 //        buffer = static_cast<const byte *>(buffer) + (size - size_left);
         if (nb_ == 0) {
 //          std::memcpy(&blck_v.data[0], buffer, size_left);
-          idx = std::memcpy(&blck_v.data[0], idx, size_left);
-          blck_v.size_ = size_left;
+//          idx = std::memcpy(&blck_v.data[0], idx, size_left);
+//          blck_v.size_ = size_left;
+
           // finished
-          auto prv_blk_ = blck_key;
-          blck_key = GetFreeBlock();
-          blck_v.next_block_ = blck_key;
+//          auto prv_blk_ = blck_key;
+//          blck_key = GetFreeBlock();
+//          blck_v.next_block_ = blck_key;
 
           mutex_->lock();
-          store_->put(prv_blk_.pack(), blck_v.pack());
+//          store_->put(prv_blk_.pack(), blck_v.pack());
 
           // update the stat
-          fh_.md_.last_block_key_ = blck_key;
+//          fh_.md_.last_block_key_ = blck_key;
 
           fh_.md_.fstat_.st_blocks += blocks_to_allocate_;
           fh_.md_.fstat_.st_size += size;
@@ -747,26 +726,26 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
             idx = std::memcpy(&blck_v.data[0], idx, size_left);
             blck_v.size_ = size_left;
             mutex_->lock();
-            store_->put(blck_key.pack(), blck_v.pack());
+//            store_->put(blck_key.pack(), blck_v.pack());
             mutex_->unlock();
             break;
           } else {
 //            std::memcpy(&blck_v.data[0], buffer, KVFS_DEF_BLOCK_SIZE_4K);
             idx = std::memcpy(&blck_v.data[0], idx, KVFS_DEF_BLOCK_SIZE_4K);
             blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
-            auto prv_blk_ = blck_key;
-            blck_key = GetFreeBlock();
-            blck_v.next_block_ = blck_key;
+//            auto prv_blk_ = blck_key;
+//            blck_key = GetFreeBlock();
+//            blck_v.next_block_ = blck_key;
             mutex_->lock();
             blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
-            store_->put(prv_blk_.pack(), blck_v.pack());
+//            store_->put(prv_blk_.pack(), blck_v.pack());
 //            buffer = static_cast<const byte *>(buffer) + KVFS_DEF_BLOCK_SIZE_4K;
             mutex_->unlock();
 
           }
         }
         mutex_->lock();
-        fh_.md_.last_block_key_ = blck_key;
+//        fh_.md_.last_block_key_ = blck_key;
         // update the stat
         fh_.md_.fstat_.st_blocks += blocks_to_allocate_;
         fh_.md_.fstat_.st_size += size;
@@ -926,11 +905,11 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
     }
     // something went wrong
     mutex_->unlock();
-    errorno_ = -ECANCELED;
-    throw FSError(FSErrorType::FS_EIO, "Failed to write.");
-  } catch (const std::exception &e) {
-    errorno_ = -EIO;
-    throw FSError(FSErrorType::FS_EIO, "Failed to write.");
+    return -1;
+  } catch (...) {
+    errorno_ = -EINTR;
+    throw FSError(FSErrorType::FS_EINTR,
+                  "The function write() was interrupted by a signal, or terminated prematurely.");
   }
 }
 kvfs::kvfsBlockKey kvfs::KVFS::GetFreeBlock() {
@@ -948,24 +927,28 @@ kvfs::kvfsBlockKey kvfs::KVFS::GetFreeBlock() {
       // check if the block refers to another block
       kvfsBlockValue bv_{};
       auto in_key_ = key;
-      while (store_->hasKey(in_key_.pack())) {
+      if (store_->hasKey(in_key_.pack())) {
         sr = store_->get(in_key_.pack());
         if (sr.isValid()) {
           bv_.parse(sr);
-          if (bv_.next_block_.block_number_ == 0) {
-            break;
-          } else {
+          if (bv_.next_block_.block_number_ != 0) {
             in_key_ = bv_.next_block_;
           }
         }
       }
       if (in_key_.block_number_ == key.block_number_) {
+        // the block is solo
+        // mark it zero
         val.blocks[val.count_ - 1] = kvfsBlockKey();
-        --val.count_;
-        if (val.count_ == 0) {
-          // its an empty array now, delete it from store
-          store_->delete_(fb_key.pack());
-        }
+      } else {
+        // the block referred to another block
+        // delete it from array
+        val.blocks[val.count_ - 1] = in_key_;
+      }
+      --val.count_;
+      if (val.count_ == 0) {
+        // its an empty array now, delete it from store
+        store_->delete_(fb_key.pack());
       }
       --super_block_.freeblocks_count_;
       // unlock

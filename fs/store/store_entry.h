@@ -27,11 +27,9 @@ enum class StoreEntryType : uint8_t {
   DATA_KEY, F_KEY
 };
 
-
-
 struct kvfsDirKey {
-  kvfs_file_inode_t inode_;
-  kvfs_file_hash_t hash_;
+  kvfs_file_inode_t inode_{};
+  kvfs_file_hash_t hash_{};
 
   void parse(const std::string &sr) {
     auto bytes = sr.data();
@@ -50,7 +48,7 @@ struct kvfsDirKey {
 };
 
 struct kvfsBlockKey {
-  uint64_t block_number_;
+  uint64_t block_number_{};
 
   std::string pack() const {
     std::string d(sizeof(kvfsBlockKey), L'\0');
@@ -64,9 +62,27 @@ struct kvfsBlockKey {
 };
 
 struct kvfsBlockValue {
-  kvfsBlockKey next_block_;
-  size_t size_;
-  byte data[KVFS_DEF_BLOCK_SIZE_4K];
+  kvfsBlockKey next_block_{};
+  size_t size_{};
+  byte data[KVFS_DEF_BLOCK_SIZE_4K]{};
+
+  // write from offset_ upto buffer_size, buffer_size is <= KVFS_BLOCK_SIZE
+  const void *write(const void *buffer, size_t buffer_size) {
+    if (size_ != KVFS_DEF_BLOCK_SIZE_4K) {
+      std::memcpy(&data[size_], buffer, buffer_size);
+      // update size
+      size_ += buffer_size;
+      // return idx in buffer after write
+      auto output = static_cast<const byte *>(buffer) + buffer_size;
+      return output;
+    }
+    return buffer;
+  }
+
+  // read into buffer upto size
+  void *read(void *buffer, size_t size) const {
+    return std::memcpy(buffer, data, size);
+  }
 
   std::string pack() const {
     std::string d(sizeof(kvfsBlockValue), L'\0');
@@ -89,11 +105,9 @@ struct kvfsMetaData {
   kvfsDirKey parent_key_{};
   kvfs_off_t children_offset_{};
   kvfs_stat fstat_{};
-  kvfsBlockKey first_block_key_{};
   kvfsBlockKey last_block_key_{};
   kvfsDirKey real_key_{};
   kvfsBlockValue inline_blck{};
-
 
   kvfsMetaData() = default;
 
@@ -124,7 +138,7 @@ struct kvfsMetaData {
     // set parent
     parent_key_ = parent;
   }
-  
+
   void parse(const kvfs::StoreResult &result) {
     auto bytes = result.asString();
     if (bytes.size() != sizeof(kvfsMetaData)) {
