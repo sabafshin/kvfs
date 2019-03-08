@@ -15,6 +15,8 @@
 #define KVFS_HAVE_ROCKSDB
 #endif
 
+#define KVFS_DEBUG
+
 /* #undef KVFS_HAVE_ROCKSDB */
 
 #define CACHE_SIZE              512

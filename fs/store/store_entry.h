@@ -45,9 +45,14 @@ struct kvfsDirKey {
     memcpy(&d[0], this, d.size());
     return d;
   }
+
+  bool operator==(const kvfsDirKey &c2) const {
+    return c2.inode_ == this->inode_ && c2.hash_ == this->hash_;
+  }
 };
 
 struct kvfsBlockKey {
+  uint64_t offset_{};
   uint64_t block_number_{};
 
   std::string pack() const {
@@ -56,17 +61,27 @@ struct kvfsBlockKey {
     return d;
   }
 
+  void parse(const std::string &sr) {
+    auto bytes = sr.data();
+    if (sr.size() != sizeof(kvfsBlockKey)) {
+      throw std::invalid_argument("Bad size");
+    }
+    auto *idx = bytes;
+    memcpy(this, idx, sizeof(kvfsBlockKey));
+  }
+
   bool operator==(const kvfsBlockKey &c2) const {
-    return c2.block_number_ == this->block_number_;
+    return c2.block_number_ == this->block_number_ && c2.offset_ == this->offset_;
   }
 };
 
 struct kvfsBlockValue {
   kvfsBlockKey next_block_{};
+  kvfsDirKey owener_;
   size_t size_{};
   byte data[KVFS_DEF_BLOCK_SIZE]{};
 
-  // write from offset_ upto buffer_size, buffer_size is <= KVFS_BLOCK_SIZE
+  // write append upto buffer_size, buffer_size is <= KVFS_BLOCK_SIZE
   const void *write(const void *buffer, size_t buffer_size) {
     if (size_ != KVFS_DEF_BLOCK_SIZE) {
       std::memcpy(&data[size_], buffer, buffer_size);
@@ -79,9 +94,27 @@ struct kvfsBlockValue {
     return buffer;
   }
 
+  // write at give offset upto buffer size
+  const void *write_at(const void *buffer, size_t buffer_size, kvfs_off_t offset) {
+    // offset is between 0 and KVFS_BLOCK_SIZE
+    size_ = offset + buffer_size;
+    std::memcpy(&data[offset], buffer, buffer_size);
+    auto output = static_cast<const byte *>(buffer) + buffer_size;
+    return output;
+  }
+
   // read into buffer upto size
   void *read(void *buffer, size_t size) const {
-    return std::memcpy(buffer, data, size);
+    std::memcpy(buffer, data, size);
+    void *idx = static_cast<byte *>(buffer) + size;
+    return idx;
+  }
+
+  // read from given offset upto size
+  void *read_at(void *buffer, size_t size, kvfs_off_t offset) const {
+    std::memcpy(buffer, &data[offset], size);
+    void *idx = static_cast<byte *>(buffer) + size;
+    return idx;
   }
 
   std::string pack() const {

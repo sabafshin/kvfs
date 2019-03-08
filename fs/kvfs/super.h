@@ -55,8 +55,8 @@ struct kvfsFreeBlocksKey {
   }
 };
 struct kvfsFreeBlocksValue {
-  kvfsFreeBlocksKey next_key_;
-  uint32_t count_;
+  kvfsFreeBlocksKey next_key_{};
+  uint32_t count_{};
   kvfsBlockKey blocks[512];
 
   std::string pack() const {

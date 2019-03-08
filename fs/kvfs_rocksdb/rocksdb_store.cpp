@@ -214,13 +214,40 @@ StoreResult RocksDBStore::get_next(const std::string &key_, const uint64_t &pref
       key.parse(key_str);
       kvfsMetaData md_;
       md_.parse(StoreResult(std::string(value_str)));
-      if (key.inode_ == prefix_ && md_.dirent_.d_off == offset) {
+      if (key.inode_ == prefix_ && md_.dirent_.d_off >= offset) {
         delete iter;
         return StoreResult(std::string(value_str));
       }
     }
   }
   delete iter;
+  // not found
+  return StoreResult();
+}
+StoreResult RocksDBStore::seek_at(const std::string &key, const uint64_t &postfix_, const kvfsDirKey &owner) {
+  auto iter = db_handle->db->NewIterator(ReadOptions());
+  for (iter->Seek(key); iter->Valid(); iter->Next()) {
+    auto key_str = iter->key().ToString();
+    auto value_str = iter->value().ToString();
+
+    if (iter->value().size() == sizeof(kvfsBlockValue) && iter->key().size() == sizeof(kvfsBlockKey)) {
+      kvfsBlockKey key{};
+      key.parse(key_str);
+      if (key.offset_ != postfix_) {
+        continue;
+      }
+      // it is the block offset we seek so we check owner
+      kvfsBlockValue bv_;
+      bv_.parse(StoreResult(std::string(value_str)));
+      if (bv_.owener_ == owner) {
+        // we have found the block
+        // return the value
+        delete iter;
+        return StoreResult(std::string(value_str));
+      }
+    }
+  }
+
   // not found
   return StoreResult();
 }

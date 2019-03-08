@@ -27,3 +27,9 @@ we write the data as SST files.
 ** SST files are external from the DB which need to be ingested to the DB afterwards **
 
 We should just us twolevel index, data DB. 
+
+
+block keys contain block number and an offset
+this offset only is changed when the write functions
+freeing block will put this key in the freeblocks
+the offset doens't matter

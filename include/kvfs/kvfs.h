@@ -104,8 +104,18 @@ class KVFS : public FS {
   std::pair<ssize_t, kvfs::kvfsBlockKey> WriteBlocks(kvfsBlockKey blck_key_,
                                                      size_t blcks_to_write_,
                                                      const void *buffer,
-                                                     size_t buffer_size_);
-  std::pair<size_t, const void *> FillBlock(kvfsBlockValue *blck_, const void *buffer, size_t buffer_size_);
+                                                     size_t buffer_size_,
+                                                     const kvfsDirKey &owner);
+  std::pair<size_t, const void *> FillBlock(kvfsBlockValue *blck_,
+                                            const void *buffer,
+                                            size_t buffer_size_,
+                                            const kvfsDirKey &owner);
+  std::pair<ssize_t, void *> ReadBlock(kvfsBlockValue *blck_, void *buffer, size_t size, off_t offset);
+  ssize_t ReadBlocks(kvfsBlockKey blck_key_,
+                     size_t blcks_to_read_,
+                     size_t buffer_size_,
+                     off_t offset,
+                     void *buffer);
 };
 
 }  // namespace kvfs
