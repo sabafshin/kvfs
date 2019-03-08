@@ -17,7 +17,8 @@ using random_bytes_engine = std::independent_bits_engine<
 int main() {
   std::unique_ptr<FS> fs_ = std::make_unique<kvfs::KVFS>();
   int flags = O_CREAT;
-  flags |= O_WRONLY;
+  flags |= O_WRONLY | O_APPEND;
+  std::cout << "File opened with flags: " << flags << std::endl;
   mode_t mode = geteuid();
 //  std::string file_name = "../..////./Hi.txt";
   std::string file_name = "Hi.txt";
@@ -25,28 +26,28 @@ int main() {
   int fd_ = fs_->Open(file_name.c_str(), flags, mode);
   std::cout << fd_ << std::endl;
 
-  size_t data_size = 20000;
+  auto data = "123456789123456789123456"; // 24 bytes
+  size_t data_size = strlen(data);
   std::cout << data_size << std::endl;
-
-  random_bytes_engine rbe;
+  /*random_bytes_engine rbe;
   std::vector<unsigned char> data(data_size);
-  std::generate(begin(data), end(data), std::ref(rbe));
+  std::generate(begin(data), end(data), std::ref(rbe));*/
 
-  const void *buffer_w = &data;
+  const void *buffer_w = data;
 
   ssize_t size = fs_->Write(fd_, buffer_w, data_size);
   std::cout << "Wrote to kvfs: " << size << std::endl;
 //  size = fs_->Write(fd_, buffer_w, data_size);
 //  std::cout << "Wrote to kvfs: " <<  size << std::endl;
 
-  void *buffer_r = std::malloc(data_size);
-  auto status = fs_->Read(fd_, buffer_r, data_size);
-
-  std::cout << "Read from kvfs: " << status << std::endl;
+//  void *buffer_r = std::malloc(data_size);
+//  auto status = fs_->Read(fd_, buffer_r, data_size);
+//
+//  std::cout << "Read from kvfs: " << status << std::endl;
 
   fs_->Close(fd_);
 
-  free(buffer_r);
+//  free(buffer_r);
   fs_->TuneFS();
   fs_->DestroyFS();
   fs_.reset();

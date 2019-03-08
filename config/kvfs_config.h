@@ -19,7 +19,7 @@
 
 #define CACHE_SIZE              512
 //#define KVFS_LINK_MAX           32000
-#define KVFS_DEF_BLOCK_SIZE_4K  4096
+#define KVFS_DEF_BLOCK_SIZE     4
 //#define KVFS_INODE_SIZE         64
 //#define KVFS_MAX_NAME_SIZE      256
 //#define KVFS_DEF_BLOCK_SIZE_2MB 2097152

@@ -97,10 +97,15 @@ class KVFS : public FS {
   std::filesystem::path ResolvePath(const std::filesystem::path &input);
   inline bool starts_with(const std::string &s1, const std::string &s2);
   std::filesystem::path GetSymLinkRealPath(const kvfsMetaData &data);
-  kvfs_file_inode_t FreeInode();
+  kvfs_file_inode_t GetFreeInode();
   bool FreeUpBlock(const kvfsBlockKey &key);
   kvfsBlockKey GetFreeBlock();
-  uint32_t FreeFD();
+  uint32_t GetFreeFD();
+  std::pair<ssize_t, kvfs::kvfsBlockKey> WriteBlocks(kvfsBlockKey blck_key_,
+                                                     size_t blcks_to_write_,
+                                                     const void *buffer,
+                                                     size_t buffer_size_);
+  std::pair<size_t, const void *> FillBlock(kvfsBlockValue *blck_, const void *buffer, size_t buffer_size_);
 };
 
 }  // namespace kvfs

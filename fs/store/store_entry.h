@@ -64,11 +64,11 @@ struct kvfsBlockKey {
 struct kvfsBlockValue {
   kvfsBlockKey next_block_{};
   size_t size_{};
-  byte data[KVFS_DEF_BLOCK_SIZE_4K]{};
+  byte data[KVFS_DEF_BLOCK_SIZE]{};
 
   // write from offset_ upto buffer_size, buffer_size is <= KVFS_BLOCK_SIZE
   const void *write(const void *buffer, size_t buffer_size) {
-    if (size_ != KVFS_DEF_BLOCK_SIZE_4K) {
+    if (size_ != KVFS_DEF_BLOCK_SIZE) {
       std::memcpy(&data[size_], buffer, buffer_size);
       // update size
       size_ += buffer_size;
@@ -123,7 +123,7 @@ struct kvfsMetaData {
     fstat_.st_mode = mode;
     fstat_.st_blocks = 0;
     fstat_.st_ctim.tv_sec = std::time(nullptr);
-    fstat_.st_blksize = KVFS_DEF_BLOCK_SIZE_4K;
+    fstat_.st_blksize = KVFS_DEF_BLOCK_SIZE;
     // owner
     fstat_.st_uid = getuid();
     fstat_.st_gid = getgid();

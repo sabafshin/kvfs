@@ -51,7 +51,7 @@ class RocksDBStore : public Store {
 
   bool destroy() override;
 
-  std::unique_ptr<WriteBatch> beginWrite(size_t buf_size = 0) override;
+  std::unique_ptr<WriteBatch> get_write_batch(size_t buf_size = 0) override;
 
  private:
   std::shared_ptr<RocksHandles> db_handle;

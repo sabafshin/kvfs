@@ -194,7 +194,7 @@ void RocksDBWriteBatch::delete_(const std::string &key) {
 
 }//namespace
 
-std::unique_ptr<Store::WriteBatch> RocksDBStore::beginWrite(size_t buf_size) {
+std::unique_ptr<Store::WriteBatch> RocksDBStore::get_write_batch(size_t buf_size) {
   return std::make_unique<RocksDBWriteBatch>(db_handle, buf_size);
 }
 bool RocksDBStore::destroy() {
@@ -203,7 +203,7 @@ bool RocksDBStore::destroy() {
 }
 StoreResult RocksDBStore::get_next(const std::string &key_, const uint64_t &prefix_, const kvfs_off_t &offset) {
   auto iter = db_handle->db->NewIterator(ReadOptions());
-  for (iter->Seek(key_); iter->Valid() /*&& iter->key().starts_with(prfx.pack())*/; iter->Next()) {
+  for (iter->Seek(key_); iter->Valid(); iter->Next()) {
     auto key_str = iter->key().ToString();
     auto value_str = iter->value().ToString();
 //    std::cout <<  << std::endl;

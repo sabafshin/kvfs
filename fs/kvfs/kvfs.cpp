@@ -122,7 +122,7 @@ kvfsDIR *KVFS::OpenDir(const char *path) {
     }
 
     // insert it into open_fds
-    auto fd_ = FreeFD();
+    auto fd_ = GetFreeFD();
     auto fh_ = kvfsFileHandle();
     fh_.md_ = md_;
     fh_.key_ = key;
@@ -215,7 +215,7 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
       // file doesn't exist so create new one
       // dirent.name
       auto name = resolved_path_.filename().string();
-      auto md_ = kvfsMetaData(name, FreeInode(), mode, current_key_);
+      auto md_ = kvfsMetaData(name, GetFreeInode(), mode, current_key_);
       // Acquire lock
       mutex_->lock();
 
@@ -428,7 +428,7 @@ std::filesystem::path kvfs::KVFS::GetSymLinkRealPath(const kvfs::kvfsMetaData &d
 bool kvfs::KVFS::starts_with(const std::string &s1, const std::string &s2) {
   return s2.size() <= s1.size() && s1.compare(0, s2.size(), s2) == 0;
 }
-kvfs_file_inode_t kvfs::KVFS::FreeInode() {
+kvfs_file_inode_t kvfs::KVFS::GetFreeInode() {
   kvfs_file_inode_t fi = super_block_.next_free_inode_;
   ++super_block_.next_free_inode_;
   ++super_block_.total_inode_count_;
@@ -519,8 +519,8 @@ ssize_t kvfs::KVFS::Read(int filedes, void *buffer, size_t size) {
 
     std::memcpy(buffer, &fh_.md_.inline_blck.data[0], fh_.md_.inline_blck.size_);
     size_t count = fh_.md_.inline_blck.size_;
-    if (size > KVFS_DEF_BLOCK_SIZE_4K) {
-      auto to_read = (size - count) / KVFS_DEF_BLOCK_SIZE_4K;
+    if (size > KVFS_DEF_BLOCK_SIZE) {
+      auto to_read = (size - count) / KVFS_DEF_BLOCK_SIZE;
       // copy inline
       // keep orig index of buffer
       auto org_idx = buffer;
@@ -528,7 +528,7 @@ ssize_t kvfs::KVFS::Read(int filedes, void *buffer, size_t size) {
       mutex_->lock();
       auto bkey = fh_.md_.inline_blck.next_block_.pack();
       kvfsBlockValue bvalue{};
-      if ((size - count) <= KVFS_DEF_BLOCK_SIZE_4K) {
+      if ((size - count) <= KVFS_DEF_BLOCK_SIZE) {
         if (store_->hasKey(bkey)) {
           auto sr = store_->get(bkey);
           bvalue.parse(sr);
@@ -576,6 +576,7 @@ ssize_t kvfs::KVFS::Read(int filedes, void *buffer, size_t size) {
 ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
   kvfsFileHandle fh_;
   auto status = open_fds_->find(filedes, fh_);
+  ssize_t written;
   if (!status) {
     errorno_ = -EBADFD;
     throw FSError(FSErrorType::FS_EBADF, "The file descriptor doesn't name a opened file, invalid fd");
@@ -595,321 +596,82 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
     // determine which block to write from, then
     // pass that to blocks writer.
 
+    if (fh_.md_.inline_blck.size_ < KVFS_DEF_BLOCK_SIZE) {
+      // update inline data then write left over to blocks
+      mutex_->lock();
+      auto pair = FillBlock(&fh_.md_.inline_blck, buffer, size);
+      written = pair.first;
+      mutex_->unlock();
+      if (written == static_cast<ssize_t>(size)) {
+        // finished, buffer fitted into inline block
+        goto out;
+      }
+
+      kvfsBlockKey new_blck = GetFreeBlock();
+      mutex_->lock();
+      fh_.md_.inline_blck.next_block_ = new_blck;
+      mutex_->unlock();
+
+      size_t size_left = size - written;
+      size_t blocks_to_write_ = size_left / KVFS_DEF_BLOCK_SIZE;
+      blocks_to_write_ += ((size_left % KVFS_DEF_BLOCK_SIZE) > 0) ? 1 : 0;
+
+      auto result = WriteBlocks(fh_.md_.inline_blck.next_block_, blocks_to_write_, pair.second, size - written);
+      written += result.first;
+      mutex_->lock();
+      fh_.md_.last_block_key_ = result.second;
+      mutex_->unlock();
+      goto out;
+    } else {
+
+      mutex_->lock();
+      auto updated_key = fh_.md_.last_block_key_;
+      StoreResult sr = store_->get(fh_.md_.last_block_key_.pack());
+      mutex_->unlock();
+      if (sr.isValid()) {
+        auto *bv_ = new kvfsBlockValue();
+        bv_->parse(sr);
+        // fill this block then write left over blocks
+        auto pair = FillBlock(bv_, buffer, size);
+        written = pair.first;
+        if (written == static_cast<ssize_t>(size)) {
+          // finished, buffer fitted in last block
+          goto out;
+        }
+
+        bv_->next_block_ = GetFreeBlock();
+
+        size_t size_left = size - written;
+        size_t blocks_to_write_ = size_left / KVFS_DEF_BLOCK_SIZE;
+        blocks_to_write_ += ((size_left % KVFS_DEF_BLOCK_SIZE) > 0) ? 1 : 0;
+
+        auto result = WriteBlocks(bv_->next_block_, blocks_to_write_, pair.second, size - written);
+        written += result.first;
+
+        mutex_->lock();
+        fh_.md_.last_block_key_ = result.second;
+        store_->put(updated_key.pack(), bv_->pack());
+        mutex_->unlock();
+        delete (bv_);
+        goto out;
+      } else {
+        // we shouldn't reach here ideally
+        errorno_ = -EINTR;
+        throw FSError(FSErrorType::FS_EINTR, "The function write exited prematurely");
+      }
+    }
+    out:
+    // update stats and return
+    mutex_->lock();
+    fh_.md_.fstat_.st_size += written;
+    fh_.offset_ += written;
+    fh_.md_.fstat_.st_mtim.tv_sec = time_now;
+    mutex_->unlock();
+    return written;
 
   } else {
     // call to PWrite to write from offset
     return this->PWrite(filedes, buffer, size, fh_.offset_);
-  }
-  try {
-    auto blocks_to_allocate_ = size / KVFS_DEF_BLOCK_SIZE_4K;
-    auto nb_ = blocks_to_allocate_;
-    // size left to write
-    auto size_left = size;
-    auto orig_buffer = buffer;
-    auto orig_size = size;
-    const void *idx = nullptr;
-    mutex_->lock();
-    // if inline size is not max block size, then write from that, else use last key and write from there.
-    // check if inline data is not max size
-    if (fh_.md_.inline_blck.size_ != KVFS_DEF_BLOCK_SIZE_4K) {
-      // check inline size
-      auto size_to_write = KVFS_DEF_BLOCK_SIZE_4K - fh_.md_.inline_blck.size_;
-      // check buffer size
-      if (size <= size_to_write) {
-        // copy from last
-//        idx = std::memcpy(&fh_.md_.inline_blck.data[fh_.md_.inline_blck.size_], buffer, size);
-        fh_.md_.inline_blck.write(buffer, size);
-        // finished
-
-        // update the stat
-        fh_.md_.fstat_.st_blocks += blocks_to_allocate_;
-        fh_.md_.fstat_.st_size += size;
-        fh_.md_.fstat_.st_mtim.tv_sec = time_now;
-//        fh_.md_.inline_blck.size_ = static_cast<size_t>(fh_.md_.fstat_.st_size);
-
-        open_fds_->insert(filedes, fh_);
-//        buffer = orig_buffer;
-        mutex_->unlock();
-        return size;
-      } else if (fh_.md_.inline_blck.size_ < KVFS_DEF_BLOCK_SIZE_4K) {
-        // write size_left from buffer
-        // size is bigger than size_to_write
-        // so write it all in inline
-//        idx = std::memcpy(&fh_.md_.inline_blck.data[fh_.md_.inline_blck.size_], buffer, size_to_write);
-        fh_.md_.inline_blck.write(buffer, size_to_write);
-//        fh_.md_.inline_blck.size_ += size_to_write;
-
-        // go up the index
-//        buffer = static_cast<const byte *>(buffer) + size_to_write;
-
-        kvfsBlockValue blck_v{};
-        size_left -= size_to_write;
-        // write upto blck size from buffer then loop for the rest
-        if (size_left <= KVFS_DEF_BLOCK_SIZE_4K) {
-          // get a free block
-          mutex_->unlock();
-          auto blck_key = GetFreeBlock();
-          mutex_->lock();
-          fh_.md_.inline_blck.next_block_ = blck_key;
-//          std::memcpy(&blck_v.data[0], buffer, size_left);
-//          idx = std::memcpy(&blck_v.data[0], idx, size_left);
-//          blck_v.size_ = size_left;
-          idx = blck_v.write(buffer, size_left);
-          // finished
-          store_->put(blck_key.pack(), blck_v.pack());
-
-          // update the stat
-          fh_.md_.last_block_key_ = blck_key;
-
-          fh_.md_.fstat_.st_blocks += blocks_to_allocate_;
-          fh_.md_.fstat_.st_size += size;
-          fh_.md_.fstat_.st_mtim.tv_sec = time_now;
-
-          open_fds_->insert(filedes, fh_);
-          mutex_->unlock();
-          buffer = orig_buffer;
-          return size;
-
-        } else {
-//          std::memcpy(&blck_v.data[0], buffer, KVFS_DEF_BLOCK_SIZE_4K);
-          // get a free block
-          mutex_->unlock();
-          auto blck_key = GetFreeBlock();
-          mutex_->lock();
-
-//          idx = std::memcpy(&blck_v.data[0], idx, KVFS_DEF_BLOCK_SIZE_4K);
-          blck_v.write(idx, KVFS_DEF_BLOCK_SIZE_4K);
-          size_left -= KVFS_DEF_BLOCK_SIZE_4K;
-          /*mutex_->unlock();
-          auto prv_blk_ = blck_key;
-          blck_key = GetFreeBlock();
-          blck_v.next_block_ = blck_key;
-          mutex_->lock();
-          */
-          blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
-          store_->put(blck_key.pack(), blck_v.pack());
-          mutex_->unlock();
-        }
-        mutex_->unlock();
-
-        nb_ = size_left / KVFS_DEF_BLOCK_SIZE_4K;
-//        buffer = static_cast<const byte *>(buffer) + (size - size_left);
-        if (nb_ == 0) {
-//          std::memcpy(&blck_v.data[0], buffer, size_left);
-//          idx = std::memcpy(&blck_v.data[0], idx, size_left);
-//          blck_v.size_ = size_left;
-
-          // finished
-//          auto prv_blk_ = blck_key;
-//          blck_key = GetFreeBlock();
-//          blck_v.next_block_ = blck_key;
-
-          mutex_->lock();
-//          store_->put(prv_blk_.pack(), blck_v.pack());
-
-          // update the stat
-//          fh_.md_.last_block_key_ = blck_key;
-
-          fh_.md_.fstat_.st_blocks += blocks_to_allocate_;
-          fh_.md_.fstat_.st_size += size;
-          fh_.md_.fstat_.st_mtim.tv_sec = time_now;
-
-          open_fds_->insert(filedes, fh_);
-          mutex_->unlock();
-          buffer = orig_buffer;
-          return size;
-        }
-        for (uint64_t i = 0; i < nb_; ++i) {
-          // write upto blck size from buffer then loop for the rest
-          if (size_left <= KVFS_DEF_BLOCK_SIZE_4K) {
-//            std::memcpy(&blck_v.data[0], buffer, size_left);
-            idx = std::memcpy(&blck_v.data[0], idx, size_left);
-            blck_v.size_ = size_left;
-            mutex_->lock();
-//            store_->put(blck_key.pack(), blck_v.pack());
-            mutex_->unlock();
-            break;
-          } else {
-//            std::memcpy(&blck_v.data[0], buffer, KVFS_DEF_BLOCK_SIZE_4K);
-            idx = std::memcpy(&blck_v.data[0], idx, KVFS_DEF_BLOCK_SIZE_4K);
-            blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
-//            auto prv_blk_ = blck_key;
-//            blck_key = GetFreeBlock();
-//            blck_v.next_block_ = blck_key;
-            mutex_->lock();
-            blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
-//            store_->put(prv_blk_.pack(), blck_v.pack());
-//            buffer = static_cast<const byte *>(buffer) + KVFS_DEF_BLOCK_SIZE_4K;
-            mutex_->unlock();
-
-          }
-        }
-        mutex_->lock();
-//        fh_.md_.last_block_key_ = blck_key;
-        // update the stat
-        fh_.md_.fstat_.st_blocks += blocks_to_allocate_;
-        fh_.md_.fstat_.st_size += size;
-        fh_.md_.fstat_.st_mtim.tv_sec = time_now;
-
-        open_fds_->insert(filedes, fh_);
-
-        buffer = orig_buffer;
-        mutex_->unlock();
-        return size;
-      }
-    } else {
-      // do above but from last key
-      if (!store_->hasKey(fh_.md_.last_block_key_.pack())) {
-        errorno_ = -ECANCELED;
-        return -errorno_;
-      }
-      auto sr = store_->get(fh_.md_.last_block_key_.pack());
-      if (sr.isValid()) {
-        kvfsBlockValue bv_{};
-        bv_.parse(sr);
-        // check last key block's size
-        auto size_to_write = KVFS_DEF_BLOCK_SIZE_4K - bv_.size_;
-        // check buffer size
-        if (size <= size_to_write) {
-          // copy from last
-          std::memcpy(&bv_.data[bv_.size_], buffer, size);
-          // finished
-          bv_.size_ += size;
-          store_->put(fh_.md_.last_block_key_.pack(), bv_.pack());
-
-          // update the stat
-          fh_.md_.fstat_.st_blocks += blocks_to_allocate_;
-          fh_.md_.fstat_.st_size += size;
-          fh_.md_.fstat_.st_mtim.tv_sec = time_now;
-
-          open_fds_->insert(filedes, fh_);
-          buffer = orig_buffer;
-          mutex_->unlock();
-          return size;
-        } else {
-          // write size_left from buffer
-          // size is bigger than size_to_write
-          // so write it all in inline
-//          std::memcpy(&bv_.data[bv_.size_], buffer, size_to_write);
-          idx = std::memcpy(&bv_.data[0], idx, size_to_write);
-          bv_.size_ += size_to_write;
-
-          // go up the index
-//          buffer = static_cast<const byte *>(buffer) + size_to_write;
-          // get a free block
-          auto blck_key = GetFreeBlock();
-          kvfsBlockValue blck_v{};
-          fh_.md_.inline_blck.next_block_ = blck_key;
-          size_left -= size_to_write;
-          // write upto blck size from buffer then loop for the rest
-          if (size_left <= KVFS_DEF_BLOCK_SIZE_4K) {
-//            std::memcpy(&blck_v.data[0], buffer, size_left);
-            idx = std::memcpy(&blck_v.data[0], idx, size_left);
-            blck_v.size_ = size_left;
-            // finished
-            store_->put(blck_key.pack(), blck_v.pack());
-
-            // update the stat
-            fh_.md_.last_block_key_ = blck_key;
-
-            fh_.md_.fstat_.st_blocks += blocks_to_allocate_;
-            fh_.md_.fstat_.st_size += size;
-            fh_.md_.fstat_.st_mtim.tv_sec = time_now;
-
-            open_fds_->insert(filedes, fh_);
-            mutex_->unlock();
-            buffer = orig_buffer;
-            return size;
-          } else {
-//            std::memcpy(&blck_v.data[0], buffer, KVFS_DEF_BLOCK_SIZE_4K);
-            idx = std::memcpy(&blck_v.data[0], idx, KVFS_DEF_BLOCK_SIZE_4K);
-            size_left -= KVFS_DEF_BLOCK_SIZE_4K;
-            auto prv_blk_ = blck_key;
-            blck_key = GetFreeBlock();
-            blck_v.next_block_ = blck_key;
-            mutex_->lock();
-            blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
-            store_->put(prv_blk_.pack(), blck_v.pack());
-            mutex_->unlock();
-
-          }
-          mutex_->unlock();
-
-          nb_ = size_left / KVFS_DEF_BLOCK_SIZE_4K;
-
-//          buffer = static_cast<const byte *>(buffer) + (size - size_left);
-          if (nb_ == 0) {
-//            std::memcpy(&blck_v.data[0], buffer, size_left);
-            idx = std::memcpy(&blck_v.data[0], idx, size_left);
-
-            blck_v.size_ = size_left;
-            // finished
-            auto prv_blk_ = blck_key;
-            blck_key = GetFreeBlock();
-            blck_v.next_block_ = blck_key;
-
-            mutex_->lock();
-            store_->put(prv_blk_.pack(), blck_v.pack());
-
-            // update the stat
-            fh_.md_.last_block_key_ = blck_key;
-
-            fh_.md_.fstat_.st_blocks += blocks_to_allocate_;
-            fh_.md_.fstat_.st_size += size;
-            fh_.md_.fstat_.st_mtim.tv_sec = time_now;
-
-            open_fds_->insert(filedes, fh_);
-            mutex_->unlock();
-            buffer = orig_buffer;
-            return size;
-          }
-          for (uint64_t i = 0; i <= nb_; ++i) {
-            // write upto blck size from buffer then loop for the rest
-            if (size_left <= KVFS_DEF_BLOCK_SIZE_4K) {
-//              std::memcpy(&blck_v.data[0], buffer, size_left);
-              idx = std::memcpy(&blck_v.data[0], idx, size_left);
-              blck_v.size_ = size_left;
-              mutex_->lock();
-              store_->put(blck_key.pack(), blck_v.pack());
-              mutex_->unlock();
-              break;
-            } else {
-//              std::memcpy(&blck_v.data[0], buffer, KVFS_DEF_BLOCK_SIZE_4K);
-              idx = std::memcpy(&blck_v.data[0], idx, KVFS_DEF_BLOCK_SIZE_4K);
-
-              blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
-              auto prv_blk_ = blck_key;
-              blck_key = GetFreeBlock();
-              blck_v.next_block_ = blck_key;
-              mutex_->lock();
-              blck_v.size_ = KVFS_DEF_BLOCK_SIZE_4K;
-              store_->put(prv_blk_.pack(), blck_v.pack());
-//              buffer = static_cast<const byte *>(buffer) + KVFS_DEF_BLOCK_SIZE_4K;
-              mutex_->unlock();
-            }
-          }
-          mutex_->lock();
-          fh_.md_.last_block_key_ = blck_key;
-          // update the stat
-          fh_.md_.fstat_.st_blocks += blocks_to_allocate_;
-          fh_.md_.fstat_.st_size += size;
-          fh_.md_.fstat_.st_mtim.tv_sec = time_now;
-
-          open_fds_->insert(filedes, fh_);
-
-          buffer = orig_buffer;
-          mutex_->unlock();
-          return size;
-        }
-      }
-    }
-    // something went wrong
-    mutex_->unlock();
-    return -1;
-  } catch (...) {
-    errorno_ = -EINTR;
-    throw FSError(FSErrorType::FS_EINTR,
-                  "The function write() was interrupted by a signal, or terminated prematurely.");
   }
 }
 kvfs::kvfsBlockKey kvfs::KVFS::GetFreeBlock() {
@@ -1120,7 +882,7 @@ int KVFS::MkDir(const char *filename, mode_t mode) {
     errorno_ = -EEXIST;
     mutex_->unlock();
   }
-  auto md_ = kvfsMetaData(resolved_path_.filename(), FreeInode(), mode, current_key_);
+  auto md_ = kvfsMetaData(resolved_path_.filename(), GetFreeInode(), mode, current_key_);
   // update store
   md_.fstat_.st_mode |= S_IFDIR;
   md_.dirent_.d_off = current_md_.children_offset_;
@@ -1189,7 +951,7 @@ void KVFS::DestroyFS() {
   std::filesystem::remove_all(root_path);
 
 }
-uint32_t KVFS::FreeFD() {
+uint32_t KVFS::GetFreeFD() {
   if (next_free_fd_ == KVFS_MAX_OPEN_FILES) {
     // error too many open files
     errorno_ = -ENFILE;
@@ -1199,5 +961,43 @@ uint32_t KVFS::FreeFD() {
     ++next_free_fd_;
     return fi;
   }
+}
+std::pair<ssize_t, kvfs::kvfsBlockKey> KVFS::WriteBlocks(kvfsBlockKey blck_key_,
+                                                         size_t blcks_to_write_,
+                                                         const void *buffer,
+                                                         size_t buffer_size_) {
+  auto batch = store_->get_write_batch(blcks_to_write_);
+  const void *idx = buffer;
+  ssize_t written = 0;
+  for (size_t i = 0; i < blcks_to_write_; ++i) {
+    auto *bv_ = new kvfsBlockValue();
+
+    auto pair = FillBlock(bv_, idx, buffer_size_);
+    blck_key_ = GetFreeBlock();
+    bv_->next_block_ = blck_key_;
+    batch->put(blck_key_.pack(), bv_->pack());
+    buffer_size_ -= pair.first;
+    written += pair.first;
+    // update offset
+    idx = pair.second;
+    delete (bv_);
+  }
+  // flush the write batch
+  batch->flush();
+  auto result = std::pair<ssize_t, kvfs::kvfsBlockKey>();
+  result.first = written;
+  result.second = blck_key_;
+  return result;
+}
+std::pair<size_t, const void *> KVFS::FillBlock(kvfsBlockValue *blck_, const void *buffer, size_t buffer_size_) {
+  size_t write_size = ((buffer_size_ <= KVFS_DEF_BLOCK_SIZE))
+                      ? (buffer_size_) : (KVFS_DEF_BLOCK_SIZE);
+  auto idx = blck_->write(buffer, write_size);
+  // print out blocks data
+  std::cout << blck_->data << std::endl;
+  auto pair = std::pair<size_t, const void *>();
+  pair.first = write_size;
+  pair.second = idx;
+  return pair;
 }
 }  // namespace kvfs
