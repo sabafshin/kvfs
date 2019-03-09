@@ -33,3 +33,6 @@ block keys contain block number and an offset
 this offset only is changed when the write functions
 freeing block will put this key in the freeblocks
 the offset doens't matter
+
+block keys contain number and inode they blong to
+this way each file can access a block at any given position rapidly

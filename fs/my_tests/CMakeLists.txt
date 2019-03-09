@@ -2,7 +2,6 @@
 ## Use of this source code is governed by a BSD-style
 ## license that can be found in the LICENSE file.
 
-cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
 set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(path_resolution_test)
@@ -11,3 +10,4 @@ add_subdirectory(store_test)
 add_subdirectory(dentry_cache_test)
 add_subdirectory(fs_io_test)
 add_subdirectory(fs_nested_directories_test)
+add_subdirectory(store_speed_test)

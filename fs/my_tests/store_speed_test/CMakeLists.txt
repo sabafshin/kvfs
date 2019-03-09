@@ -4,19 +4,28 @@
 
 set(CMAKE_CXX_STANDARD 17)
 
-set(PROJECT_NAME "fs_io_test")
+set(PROJECT_NAME "store_speed_test")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
 set(TEST_SRCS
-    fs_io_test.cpp)
+    store_speed_test.cpp)
 source_group("Source Files" FILES ${TEST_SRCS})
+
+#[[
+set( TEST_HEADERS
+     )
+source_group ( " Header Files " FILES ${TEST_HEADERS} )
+]]
 
 add_executable(
     ${PROJECT_NAME}
+    #        ${TEST_HEADERS}
     ${TEST_SRCS}
 )
 
 target_link_libraries(
     ${PROJECT_NAME}
-    kvfs
+    kvfs_rocksdb
+    kvfs_store
+    stdc++fs
 )

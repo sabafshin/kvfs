@@ -35,7 +35,7 @@ class Store {
 
   virtual StoreResult get_parent(const std::string &key) = 0;
 
-  virtual StoreResult get_next(const std::string &key_, const uint64_t &prefix_, const kvfs_off_t &offset) = 0;
+  virtual StoreResult get_next_dirent(const std::string &key_, const uint64_t &prefix_, const kvfs_off_t &offset) = 0;
 
   virtual StoreResult seek_at(const std::string &key, const uint64_t &postfix_, const kvfsDirKey &owner) = 0;
 
@@ -70,6 +70,43 @@ class Store {
   };
 
   virtual std::unique_ptr<WriteBatch> get_write_batch(size_t buffer_size = 0) = 0;
+
+  class Iterator {
+   public:
+
+    virtual bool Valid() const = 0;
+
+    virtual void SeekToFirst() = 0;
+
+    virtual void SeekToLast() = 0;
+
+    virtual void Seek(const std::string &target) = 0;
+
+    virtual void SeekForPrev(const std::string &target) = 0;
+
+    virtual void Next() = 0;
+
+    virtual void Prev() = 0;
+
+    virtual std::string key() const = 0;
+
+    virtual StoreResult value() const = 0;
+
+    virtual bool status() const = 0;
+
+    virtual bool Refresh() = 0;
+
+    // No copying allowed
+    // Forbidden copy construction/assignment; allow only moves
+    Iterator(const Iterator &) = delete;
+    Iterator(Iterator &&) = default;
+    Iterator &operator=(const Iterator &) = delete;
+    Iterator &operator=(Iterator &&) = default;
+    virtual ~Iterator() = default;
+    Iterator() = default;
+  };
+
+  virtual std::unique_ptr<Iterator> get_iterator() = 0;
 
 };
 

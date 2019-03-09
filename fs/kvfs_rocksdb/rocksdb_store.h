@@ -16,7 +16,7 @@
 #include <store/store.h>
 #include <store/store_entry.h>
 #include <store/store_result.h>
-
+#include <rocksdb/options.h>
 #include <rocksdb/db.h>
 
 namespace kvfs {
@@ -41,7 +41,7 @@ class RocksDBStore : public Store {
 
   std::vector<StoreResult> get_children(const std::string &key) override;
   StoreResult get_parent(const std::string &key) override;
-  StoreResult get_next(const std::string &key_, const uint64_t &prefix_, const kvfs_off_t &offset) override;
+  StoreResult get_next_dirent(const std::string &key_, const uint64_t &prefix_, const kvfs_off_t &offset) override;
   StoreResult seek_at(const std::string &key, const uint64_t &postfix_, const kvfsDirKey &owner) override;
 
   bool hasKey(const std::string &key) const override;
@@ -53,6 +53,8 @@ class RocksDBStore : public Store {
   bool destroy() override;
 
   std::unique_ptr<WriteBatch> get_write_batch(size_t buf_size = 0) override;
+
+  std::unique_ptr<Iterator> get_iterator() override;
 
  private:
   std::shared_ptr<RocksHandles> db_handle;

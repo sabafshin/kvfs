@@ -16,37 +16,28 @@ int main() {
   int flags = O_CREAT;
   flags |= O_WRONLY;
   mode_t mode = geteuid();
+  auto start = std::chrono::high_resolution_clock::now();
 
-  auto dirname = "myfiles";
-  auto res = fs_->MkDir(dirname, mode);
-  auto stream = fs_->OpenDir("myfiles");
+  for (int i = 0; i < 1000; ++i) {
+    std::string dirname = "myfiles";
+    dirname += std::to_string(i);
+    fs_->MkDir(dirname.c_str(), mode);
+  }
 
-  auto res2 = fs_->MkDir("nestedFiles_1", mode);
-  fs_->MkDir("nestedFiles_2", mode);
-  fs_->MkDir("nestedFiles_3", mode);
-  fs_->MkDir("nestedFiles_4", mode);
-  fs_->MkDir("nestedFiles_5", mode);
+  auto stream = fs_->OpenDir("/");
+  while (true) {
+    auto entry = fs_->ReadDir(stream);
+    if (!entry) {
+      break;
+    }
+//    std::cout << "Found: " << entry->d_name << std::endl;
+  }
 
-  std::cout << res << std::endl;
+  fs_->CloseDir(stream);
 
-  auto entry = fs_->ReadDir(stream);
-  std::cout << entry->d_name << std::endl;
+  auto finish = std::chrono::high_resolution_clock::now();
 
-  entry = fs_->ReadDir(stream);
-  std::cout << entry->d_name << std::endl;
-
-  entry = fs_->ReadDir(stream);
-  std::cout << entry->d_name << std::endl;
-
-  entry = fs_->ReadDir(stream);
-  std::cout << entry->d_name << std::endl;
-
-  entry = fs_->ReadDir(stream);
-  std::cout << entry->d_name << std::endl;
-
-  auto final = fs_->CloseDir(stream);
-
-  std::cout << final << std::endl;
+  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ns\n";
 
   fs_->DestroyFS();
   fs_.reset();

@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <string.h>
 #include <cstring>
+#include <linux/fs.h>
 
 namespace kvfs {
 
@@ -94,7 +95,7 @@ class KVFS : public FS {
  private:
   void FSInit();
   bool CheckNameLength(const std::filesystem::path &path);
-  std::filesystem::path ResolvePath(const std::filesystem::path &input);
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> ResolvePath(const std::filesystem::path &input);
   inline bool starts_with(const std::string &s1, const std::string &s2);
   std::filesystem::path GetSymLinkRealPath(const kvfsMetaData &data);
   kvfs_file_inode_t GetFreeInode();

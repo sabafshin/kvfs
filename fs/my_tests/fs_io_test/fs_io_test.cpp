@@ -11,6 +11,8 @@
 #include <kvfs/kvfs.h>
 #include <random>
 
+#undef KVFS_DEBUG
+
 using random_bytes_engine = std::independent_bits_engine<
     std::default_random_engine, CHAR_BIT, unsigned char>;
 
@@ -23,12 +25,14 @@ int main() {
 //  std::string file_name = "../..////./Hi.txt";
   std::string file_name = "Hi.txt";
 
-  int fd_ = fs_->Open(file_name.c_str(), flags, mode);
-  std::cout << fd_ << std::endl;
-
   auto data = "123456789abcdefghijklmnop"; // 25 bytes
   size_t data_size = strlen(data);
-  std::cout << data_size << std::endl;
+
+  auto start = std::chrono::high_resolution_clock::now();
+
+  int fd_ = fs_->Open(file_name.c_str(), flags, mode);
+//  std::cout << fd_ << std::endl;
+//  std::cout << data_size << std::endl;
   /*random_bytes_engine rbe;
   std::vector<unsigned char> data(data_size);
   std::generate(begin(data), end(data), std::ref(rbe));*/
@@ -36,8 +40,8 @@ int main() {
   const void *buffer_w = data;
 
   ssize_t size = fs_->Write(fd_, buffer_w, data_size);
-  std::cout << "Wrote to kvfs: " << size << std::endl;
-  std::cout << data << std::endl;
+//  std::cout << "Wrote to kvfs: " << size << std::endl;
+//  std::cout << data << std::endl;
 
 //  size = fs_->Write(fd_, buffer_w, data_size);
 //  std::cout << "Wrote to kvfs: " <<  size << std::endl;
@@ -45,13 +49,16 @@ int main() {
   void *buffer_r = std::malloc(data_size);
   auto status = fs_->PRead(fd_, buffer_r, data_size, 0);
 
-  std::cout << "Read from kvfs: " << status << std::endl;
-  std::cout << std::string(static_cast<char *>(buffer_r), data_size) << std::endl;
+//  std::cout << "Read from kvfs: " << status << std::endl;
+//  std::cout << std::string(static_cast<char *>(buffer_r), data_size) << std::endl;
 
   fs_->Close(fd_);
 
+  auto finish = std::chrono::high_resolution_clock::now();
+
+  std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count() << "ns\n";
+
   free(buffer_r);
-  fs_->TuneFS();
   fs_->DestroyFS();
   fs_.reset();
   return 0;

@@ -1,5 +1,5 @@
 set ( CMAKE_CXX_FLAGS_COMMON "-g -Wall -Wextra" )
-set ( CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_COMMON}" )
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_COMMON} -O3")
 set ( CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_COMMON} -O3" )
 
 add_compile_options("-std=c++17")
