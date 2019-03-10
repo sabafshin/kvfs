@@ -400,10 +400,6 @@ std::pair<std::filesystem::path,
         // the path component must exists
         // otherwise we are at the end and we just append the filename
         // file name will be checked in the calling function
-        /*if (e != input.filename()) {
-          errorno_ = -ENONET;
-          throw FSError(FSErrorType::FS_ENOENT, "No such file or directory found.");
-        }*/
         ++invalid_count;
       }
       mutex_->unlock();
@@ -604,15 +600,32 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
     // determine which block to write from, then
     // pass that to blocks writer.
 
-    kvfsBlockKey blck_key;
-    blck_key.inode_ = fh_.md_.fstat_.st_ino;
-    blck_key.block_number_ = fh_.md_.fstat_.st_size / KVFS_DEF_BLOCK_SIZE;
-
-    size_t blocks_to_write_ = size / KVFS_DEF_BLOCK_SIZE;
-    blocks_to_write_ += ((size % KVFS_DEF_BLOCK_SIZE) > 0) ? 1 : 0;
+    /*kvfsBlockKey blck_key =
+        (fh_.md_.fstat_.st_size > 0) ? fh_.md_.last_block_key_ : kvfsBlockKey(fh_.md_.fstat_.st_ino, 0);*/
+    kvfsBlockKey blck_key_;
+    blck_key_.inode_ = fh_.md_.fstat_.st_ino;
+    blck_key_.block_number_ = fh_.md_.fstat_.st_size / KVFS_DEF_BLOCK_SIZE;
     kvfs_off_t blck_offset = fh_.md_.fstat_.st_size % KVFS_DEF_BLOCK_SIZE;
+    const void *idx = buffer;
+
+    StoreResult sr = store_->get(blck_key_.pack());
+    if (sr.isValid()) {
+      kvfsBlockValue bv_;
+      bv_.parse(sr);
+      auto pair = FillBlock(&bv_, buffer, size, blck_offset);
+      written += pair.first;
+      idx = pair.second;
+      mutex_->lock();
+      store_->put(blck_key_.pack(), bv_.pack());
+      mutex_->unlock();
+      blck_key_ = kvfsBlockKey(fh_.md_.fstat_.st_ino, blck_key_.block_number_ + 1);
+    }
+
+    size_t size_left = size - written;
+    size_t blocks_to_write_ = (size_left) / KVFS_DEF_BLOCK_SIZE;
+    blocks_to_write_ += ((size_left % KVFS_DEF_BLOCK_SIZE) > 0) ? 1 : 0;
     std::pair<ssize_t, kvfs::kvfsBlockKey> result =
-        WriteBlocks(blck_key, blocks_to_write_, buffer, size - written, blck_offset);
+        WriteBlocks(blck_key_, blocks_to_write_, idx, size_left, 0);
     written += result.first;
 
     // update stats
@@ -955,11 +968,26 @@ ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
   kvfsBlockKey blck_key_;
   blck_key_.inode_ = fh_.md_.fstat_.st_ino;
   blck_key_.block_number_ = offset / KVFS_DEF_BLOCK_SIZE;
+  kvfs_off_t blck_offset = offset % KVFS_DEF_BLOCK_SIZE;
+  void *idx = buffer;
 
+  StoreResult sr = store_->get(blck_key_.pack());
+  if (sr.isValid()) {
+    kvfsBlockValue bv_;
+    bv_.parse(sr);
+    auto pair = ReadBlock(&bv_, buffer, size, blck_offset);
+    read += pair.first;
+    idx = pair.second;
+    mutex_->lock();
+    store_->put(blck_key_.pack(), bv_.pack());
+    mutex_->unlock();
+    blck_key_ = kvfsBlockKey(fh_.md_.fstat_.st_ino, blck_key_.block_number_ + 1);
+  }
+
+  size_can_read -= read;
   size_t blocks_to_read_ = size_can_read / KVFS_DEF_BLOCK_SIZE;
   blocks_to_read_ += ((size_can_read % KVFS_DEF_BLOCK_SIZE) > 0) ? 1 : 0;
-  kvfs_off_t blck_offset = offset % KVFS_DEF_BLOCK_SIZE;
-  read += ReadBlocks(blck_key_, blocks_to_read_, size_can_read, blck_offset, buffer);
+  read += ReadBlocks(blck_key_, blocks_to_read_, size_can_read, 0, idx);
   // finished
   // update stats and return
   mutex_->lock();
@@ -1012,14 +1040,27 @@ ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset)
   kvfsBlockKey blck_key_;
   blck_key_.inode_ = fh_.md_.fstat_.st_ino;
   blck_key_.block_number_ = offset / KVFS_DEF_BLOCK_SIZE;
-
-  size_t blocks_to_write_ = size / KVFS_DEF_BLOCK_SIZE;
-  blocks_to_write_ += ((size % KVFS_DEF_BLOCK_SIZE) > 0) ? 1 : 0;
-
   kvfs_off_t blck_offset = offset % KVFS_DEF_BLOCK_SIZE;
+  const void *idx = buffer;
 
+  StoreResult sr = store_->get(blck_key_.pack());
+  if (sr.isValid()) {
+    kvfsBlockValue bv_;
+    bv_.parse(sr);
+    auto pair = FillBlock(&bv_, buffer, size, blck_offset);
+    written += pair.first;
+    idx = pair.second;
+    mutex_->lock();
+    store_->put(blck_key_.pack(), bv_.pack());
+    mutex_->unlock();
+    blck_key_ = kvfsBlockKey(fh_.md_.fstat_.st_ino, blck_key_.block_number_ + 1);
+  }
+
+  size_t size_left = size - written;
+  size_t blocks_to_write_ = (size_left) / KVFS_DEF_BLOCK_SIZE;
+  blocks_to_write_ += ((size_left % KVFS_DEF_BLOCK_SIZE) > 0) ? 1 : 0;
   std::pair<ssize_t, kvfs::kvfsBlockKey> result =
-      WriteBlocks(blck_key_, blocks_to_write_, buffer, size - written, blck_offset);
+      WriteBlocks(blck_key_, blocks_to_write_, idx, size_left, 0);
   written += result.first;
 
   // update stats
@@ -1097,7 +1138,7 @@ std::pair<ssize_t, kvfs::kvfsBlockKey> KVFS::WriteBlocks(kvfsBlockKey blck_key_,
       bv_->next_block_.block_number_ = blck_key_.block_number_ + 1;
     }
 #ifdef KVFS_DEBUG
-    std::cout << blck_key_.block_number_ << " " << blck_key_.offset_ << std::endl;
+    std::cout << blck_key_.block_number_ << " " << std::string((char *)bv_->data) << std::endl;
 #endif
     batch->put(blck_key_.pack(), bv_->pack());
     buffer_size_ -= pair.first;
@@ -1144,7 +1185,7 @@ ssize_t KVFS::ReadBlocks(kvfsBlockKey blck_key_,
       kvfsBlockValue bv_;
       bv_.parse(sr);
 #ifdef KVFS_DEBUG
-      std::cout << blck_key_.block_number_ << " " << blck_key_.offset_ << std::endl;
+      std::cout << blck_key_.block_number_ <<" " << std::string((char *)bv_.data) << std::endl;
 #endif
       std::pair<ssize_t, void *> pair = ReadBlock(&bv_, idx, buffer_size_, offset);
       if (pair.first > 0) {
@@ -1165,7 +1206,7 @@ std::pair<ssize_t, void *> KVFS::ReadBlock(kvfsBlockValue *blck_, void *buffer, 
   if (offset >= KVFS_DEF_BLOCK_SIZE) {
     return std::pair<ssize_t, void *>(0, buffer);
   }
-  size_t max_readable_size = static_cast<size_t>(KVFS_DEF_BLOCK_SIZE - offset);
+  size_t max_readable_size = static_cast<size_t>(blck_->size_ - offset);
   void *idx = buffer;
   if (size < max_readable_size) {
     idx = blck_->read_at(buffer, size, offset);

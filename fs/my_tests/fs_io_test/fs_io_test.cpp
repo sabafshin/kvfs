@@ -37,20 +37,50 @@ int main() {
   std::vector<unsigned char> data(data_size);
   std::generate(begin(data), end(data), std::ref(rbe));*/
 
-  const void *buffer_w = data;
-
-  ssize_t size = fs_->Write(fd_, buffer_w, data_size);
-//  std::cout << "Wrote to kvfs: " << size << std::endl;
-  std::cout << data << std::endl;
+/*  ssize_t size = 0;
+  for (int i =0; i < 100; ++i){
+    size += fs_->Write(fd_, buffer_w, data_size);
+    std::cout << "Wrote to kvfs: " << size << std::endl;
+//    std::cout << data << std::endl;
+  }
 
 //  size = fs_->Write(fd_, buffer_w, data_size);
-  std::cout << "Wrote to kvfs: " << size << std::endl;
+//  std::cout << "Wrote to kvfs: " << size << std::endl;
 
   void *buffer_r = std::malloc(data_size);
   auto status = fs_->PRead(fd_, buffer_r, data_size, 0);
 
   std::cout << "Read from kvfs: " << status << std::endl;
-  std::cout << std::string(static_cast<char *>(buffer_r), data_size) << std::endl;
+  std::cout << std::string(static_cast<char *>(buffer_r), data_size) << std::endl;*/
+
+  //////////////////////////////////////////////
+
+  int TOTAL_DATA = 100000;
+
+  const void *buffer_w = data;
+
+  int total_data_size = 0;
+
+  for (int i = 0; i < TOTAL_DATA; i++) {
+
+    ssize_t size = fs_->Write(fd_, buffer_w, data_size);
+
+    total_data_size += size;
+
+  }
+  std::cout << "Wrote to kvfs: " << total_data_size << std::endl;
+  total_data_size = 0;
+
+  for (int i = 0; i < TOTAL_DATA; ++i) {
+
+    void *buffer_r = std::malloc(data_size);
+
+    auto cur_read = fs_->PRead(fd_, buffer_r, data_size, total_data_size);
+    free(buffer_r);
+
+    total_data_size += cur_read;
+  }
+  std::cout << "Read from kvfs: " << total_data_size << std::endl;
 
   fs_->Close(fd_);
 
@@ -58,7 +88,6 @@ int main() {
 
   std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ns\n";
 
-  free(buffer_r);
   fs_->DestroyFS();
   fs_.reset();
   return 0;

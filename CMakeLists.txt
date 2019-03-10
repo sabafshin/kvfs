@@ -63,7 +63,7 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/fs)
 set(
     KVFS_SRCS
     fs/kvfs/kvfs.cpp
-    fs/kvfs/fs_error.cpp fs/kvfs/fs_error.h)
+    fs/kvfs/fs_error.cpp)
 
 source_group("Source Files" FILES ${KVFS_SRCS})
 
@@ -71,9 +71,9 @@ set(
     KVFS_HEADERS
     include/kvfs/kvfs.h
     include/kvfs/fs.h
-    fs/kvfs/fs_error.cpp
     fs/kvfs/fs_error.h
-    fs/kvfs/super.h fs/kvfs/kvfs_dirent.h)
+    fs/kvfs/super.h
+    fs/kvfs/kvfs_dirent.h)
 
 source_group("Header Files" FILES ${KVFS_HEADERS})
 

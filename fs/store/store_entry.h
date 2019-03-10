@@ -60,6 +60,9 @@ struct kvfsBlockKey {
   kvfs_off_t block_number_{};
   byte __padding[2]{}; // to distinguish this key from kvfsDirKey
 
+  kvfsBlockKey(kvfs_file_inode_t inode, kvfs_off_t number) : inode_(inode), block_number_(number) {}
+  kvfsBlockKey() = default;
+
   std::string pack() const {
     std::string d(sizeof(kvfsBlockKey), L'\0');
     memcpy(&d[0], this, d.size());
