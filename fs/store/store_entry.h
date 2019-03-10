@@ -49,12 +49,16 @@ struct kvfsDirKey {
   bool operator==(const kvfsDirKey &c2) const {
     return c2.inode_ == this->inode_ && c2.hash_ == this->hash_;
   }
+
+  bool operator!=(const kvfsDirKey &c2) const {
+    return c2.inode_ != this->inode_ && c2.hash_ != this->hash_;
+  }
 };
 
 struct kvfsBlockKey {
-  uint64_t offset_{};
   kvfs_file_inode_t inode_{};
-  uint64_t block_number_{};
+  kvfs_off_t block_number_{};
+  byte __padding[2]{}; // to distinguish this key from kvfsDirKey
 
   std::string pack() const {
     std::string d(sizeof(kvfsBlockKey), L'\0');
@@ -72,13 +76,12 @@ struct kvfsBlockKey {
   }
 
   bool operator==(const kvfsBlockKey &c2) const {
-    return c2.block_number_ == this->block_number_ && c2.offset_ == this->offset_;
+    return c2.block_number_ == this->block_number_ && c2.inode_ == this->inode_;
   }
 };
 
 struct kvfsBlockValue {
   kvfsBlockKey next_block_{};
-  kvfsDirKey owener_;
   size_t size_{};
   byte data[KVFS_DEF_BLOCK_SIZE]{};
 
@@ -137,11 +140,9 @@ struct kvfsBlockValue {
 struct kvfsMetaData {
   kvfs_dirent dirent_{};
   kvfsDirKey parent_key_{};
-  kvfs_off_t children_offset_{};
   kvfs_stat fstat_{};
   kvfsBlockKey last_block_key_{};
-  kvfsDirKey real_key_{};
-  kvfsBlockValue inline_blck{};
+  kvfsDirKey real_key_{}; // to mark symlinks to real inode
 
   kvfsMetaData() = default;
 

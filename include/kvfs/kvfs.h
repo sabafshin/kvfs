@@ -106,11 +106,11 @@ class KVFS : public FS {
                                                      size_t blcks_to_write_,
                                                      const void *buffer,
                                                      size_t buffer_size_,
-                                                     const kvfsDirKey &owner);
-  std::pair<size_t, const void *> FillBlock(kvfsBlockValue *blck_,
-                                            const void *buffer,
-                                            size_t buffer_size_,
-                                            const kvfsDirKey &owner);
+                                                     kvfs_off_t offset);
+  std::pair<ssize_t, const void *> FillBlock(kvfsBlockValue *blck_,
+                                             const void *buffer,
+                                             size_t buffer_size_,
+                                             kvfs_off_t offset);
   std::pair<ssize_t, void *> ReadBlock(kvfsBlockValue *blck_, void *buffer, size_t size, off_t offset);
   ssize_t ReadBlocks(kvfsBlockKey blck_key_,
                      size_t blcks_to_read_,

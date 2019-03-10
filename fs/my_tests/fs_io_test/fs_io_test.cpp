@@ -41,22 +41,22 @@ int main() {
 
   ssize_t size = fs_->Write(fd_, buffer_w, data_size);
 //  std::cout << "Wrote to kvfs: " << size << std::endl;
-//  std::cout << data << std::endl;
+  std::cout << data << std::endl;
 
 //  size = fs_->Write(fd_, buffer_w, data_size);
-//  std::cout << "Wrote to kvfs: " <<  size << std::endl;
+  std::cout << "Wrote to kvfs: " << size << std::endl;
 
   void *buffer_r = std::malloc(data_size);
   auto status = fs_->PRead(fd_, buffer_r, data_size, 0);
 
-//  std::cout << "Read from kvfs: " << status << std::endl;
-//  std::cout << std::string(static_cast<char *>(buffer_r), data_size) << std::endl;
+  std::cout << "Read from kvfs: " << status << std::endl;
+  std::cout << std::string(static_cast<char *>(buffer_r), data_size) << std::endl;
 
   fs_->Close(fd_);
 
   auto finish = std::chrono::high_resolution_clock::now();
 
-  std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count() << "ns\n";
+  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ns\n";
 
   free(buffer_r);
   fs_->DestroyFS();
