@@ -4,5 +4,7 @@
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/rocksdb" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/spdk" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/spdk/dpdk" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/spdk/intel-ipsec-mb" vcs="Git" />
   </component>
 </project>
