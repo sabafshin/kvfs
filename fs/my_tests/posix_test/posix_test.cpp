@@ -59,7 +59,7 @@ int main() {
 
   std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ns\n";
 
-//  system("rm -r ./myfiles*");
+  system("rm -r ./myfiles*");
 
 /*  auto file = open("/tmp/something.txt", mode);
   write(file ,contents, strlen(contents));

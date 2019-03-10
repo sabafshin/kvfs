@@ -120,4 +120,10 @@ class KVFS : public FS {
 };
 
 }  // namespace kvfs
+
+struct __kvfs_dir_stream {
+  uint32_t file_descriptor_;
+  std::unique_ptr<kvfs::Store::Iterator> ptr_;
+};
+
 #endif //KVFS_FILESYSTEM_H

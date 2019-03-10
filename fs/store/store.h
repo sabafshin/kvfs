@@ -35,10 +35,6 @@ class Store {
 
   virtual StoreResult get_parent(const std::string &key) = 0;
 
-  virtual StoreResult get_next_dirent(const std::string &key_, const uint64_t &prefix_, const kvfs_off_t &offset) = 0;
-
-  virtual StoreResult seek_at(const std::string &key, const uint64_t &postfix_, const kvfsDirKey &owner) = 0;
-
   virtual bool sync() = 0;
 
   virtual void close() = 0;
@@ -104,6 +100,9 @@ class Store {
     Iterator &operator=(Iterator &&) = default;
     virtual ~Iterator() = default;
     Iterator() = default;
+
+   private:
+    friend class Store;
   };
 
   virtual std::unique_ptr<Iterator> get_iterator() = 0;

@@ -24,18 +24,11 @@ typedef struct stat kvfs_stat;
 typedef off_t kvfs_off_t;
 #endif
 
-struct __kvfs_dir_stream {
-  uint32_t file_descriptor_;
-  kvfs_off_t offset_;
-  std::string from_;
-  uint64_t prefix;
-};
+struct __kvfs_dir_stream;
 
 /**
  * This stucture is to be used for dirstreams, the actual structure details are OPAQUE to the users.
  */
 typedef __kvfs_dir_stream kvfsDIR;
-
-
 
 #endif //KVFS_KVFS_DIRENT_H

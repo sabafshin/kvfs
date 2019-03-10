@@ -149,7 +149,10 @@ kvfsDIR *KVFS::OpenDir(const char *path) {
     //success
     auto *result = new kvfsDIR();
     result->file_descriptor_ = fd_;
-    result->offset_ = 0;
+//    result->offset_ = 0;
+    result->ptr_ = store_->get_iterator();
+    kvfsDirKey seek_key = {md_.fstat_.st_ino, 0};
+    result->ptr_->Seek(seek_key.pack());
     return result;
   }
 
@@ -781,42 +784,26 @@ kvfs_dirent *KVFS::ReadDir(kvfsDIR *dirstream) {
   }
   mutex_->unlock();
   try {
-    // start from offset on dirstream
-    // for each dirsteam get next one using get_next from prefix.
     mutex_->lock();
-    auto offset = dirstream->offset_;
-    dirstream->prefix = fh_.md_.dirent_.d_ino;
-    if (dirstream->from_.empty()) {
-      kvfsDirKey prfx{};
-      prfx.inode_ = dirstream->prefix;
-      dirstream->from_ = prfx.pack();
-    }
-    mutex_->unlock();
+    if (dirstream->ptr_->Valid()) {
+      dirstream->ptr_->Next();
+      if (dirstream->ptr_->key().size() == sizeof(kvfsDirKey)
+          && dirstream->ptr_->value().asString().size() == sizeof(kvfsMetaData)) {
+        kvfsDirKey key;
+        key.parse(dirstream->ptr_->key());
+        kvfsMetaData md_;
+        md_.parse(dirstream->ptr_->value());
 
-    while (dirstream->offset_ <= fh_.md_.children_offset_) {
-      mutex_->lock();
-      auto sr = store_->get_next_dirent(dirstream->from_, dirstream->prefix, offset);
-      mutex_->unlock();
-      if (sr.isValid()) {
-        kvfsMetaData next_md_;
-        next_md_.parse(sr);
-
-        auto result = new kvfs_dirent();
-        *result = next_md_.dirent_;
-        // update offset
-        mutex_->lock();
-        ++dirstream->offset_;
-        mutex_->unlock();
-        // success
-        return result;
-      } else {
-        // try again until offset reaches md_.children_offset.
-        mutex_->lock();
-        ++dirstream->offset_;
-        mutex_->unlock();
-        offset = dirstream->offset_;
+        if (key.inode_ == fh_.md_.fstat_.st_ino) {
+          kvfs_dirent *result = new kvfs_dirent();
+          *result = md_.dirent_;
+          mutex_->unlock();
+          return result;
+        }
       }
     }
+
+    mutex_->unlock();
     // eof
     return nullptr;
   } catch (...) {
@@ -848,6 +835,7 @@ int KVFS::CloseDir(kvfsDIR *dirstream) {
           // file was updated in another file des recently
           // evict only
           open_fds_->evict(dirstream->file_descriptor_);
+          dirstream->ptr_.reset();
           delete dirstream;
 
           mutex_->unlock();
@@ -861,6 +849,7 @@ int KVFS::CloseDir(kvfsDIR *dirstream) {
 
     // release it from open_fds
     open_fds_->evict(dirstream->file_descriptor_);
+    dirstream->ptr_.reset();
     delete dirstream;
 
     // success
@@ -930,17 +919,17 @@ int KVFS::MkDir(const char *filename, mode_t mode) {
 
   // update meta data
   md_.fstat_.st_mode |= S_IFDIR;
-  md_.dirent_.d_off = resolved.second.second.children_offset_;
-  ++resolved.second.second.children_offset_;
+//  md_.dirent_.d_off = resolved.second.second.children_offset_;
+//  ++resolved.second.second.children_offset_;
   // set this file's group id to its parent's
   md_.fstat_.st_gid = resolved.second.second.fstat_.st_gid;
   // update ctime
   md_.fstat_.st_ctim.tv_sec = time_now;
   // update parent mtime
-  resolved.second.second.fstat_.st_mtim.tv_sec = time_now;
+//  resolved.second.second.fstat_.st_mtim.tv_sec = time_now;
   // store
   store_->put(key_str, md_.pack());
-  store_->merge(resolved.second.first.pack(), resolved.second.second.pack());
+//  store_->merge(resolved.second.first.pack(), resolved.second.second.pack());
 
   //unlock
   mutex_->unlock();

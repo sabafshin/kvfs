@@ -204,7 +204,7 @@ void RocksDBWriteBatch::delete_(const std::string &key) {
 class RocksDBIterator : public Store::Iterator {
  public:
 
-  explicit RocksDBIterator(std::shared_ptr<kvfs::RocksHandles> db_handle);
+  explicit RocksDBIterator(const std::shared_ptr<kvfs::RocksHandles> &db_handle);
   ~RocksDBIterator() override;
 
   bool Valid() const override;
@@ -219,15 +219,13 @@ class RocksDBIterator : public Store::Iterator {
   bool status() const override;
   bool Refresh() override;
 
-  std::shared_ptr<RocksHandles> db_handle_;
  private:
   std::unique_ptr<rocksdb::Iterator> iterator_;
 };
 
-kvfs::RocksDBIterator::RocksDBIterator(std::shared_ptr<kvfs::RocksHandles> db_handle)
+kvfs::RocksDBIterator::RocksDBIterator(const std::shared_ptr<kvfs::RocksHandles> &db_handle)
     : Store::Iterator(),
-      db_handle_(db_handle),
-      iterator_(std::make_unique<rocksdb::Iterator>(db_handle->db->NewIterator(ReadOptions()))) {}
+      iterator_(db_handle->db->NewIterator(ReadOptions())) {}
 bool kvfs::RocksDBIterator::Valid() const {
   return iterator_->Valid();
 }
@@ -262,7 +260,6 @@ bool kvfs::RocksDBIterator::Refresh() {
   return iterator_->Refresh().ok();
 }
 kvfs::RocksDBIterator::~RocksDBIterator() {
-  db_handle_.reset();
   iterator_.reset();
 }
 
@@ -277,67 +274,6 @@ std::unique_ptr<Store::Iterator> RocksDBStore::get_iterator() {
 bool RocksDBStore::destroy() {
   rocksdb::DestroyDB(this->db_handle->db->GetName(), db_handle->db->GetOptions());
   return true;
-}
-StoreResult RocksDBStore::get_next_dirent(const std::string &key_, const uint64_t &prefix_, const kvfs_off_t &offset) {
-  auto options = ReadOptions();
-//  kvfsDirKey upperbound = {prefix_+1, 0};
-//  kvfsDirKey lowerbound = {prefix_, 0};
-//  rocksdb::Slice* up_ptr = new rocksdb::Slice(upperbound.pack());
-//  rocksdb::Slice* lo_ptr = new rocksdb::Slice(lowerbound.pack());
-//  options.total_order_seek = true;
-
-//  options.iterate_upper_bound = up_ptr;
-//  options.iterate_lower_bound = lo_ptr;
-
-  auto iter = db_handle->db->NewIterator(options);
-  iter->Seek(key_);
-  for (; iter->Valid(); iter->Next()) {
-    auto key_str = iter->key().ToString();
-    auto value_str = iter->value().ToString();
-    if (iter->key().size() == sizeof(kvfsDirKey) && iter->value().size() == sizeof(kvfsMetaData)) {
-      kvfsDirKey key{};
-      key.parse(key_str);
-      kvfsMetaData md_;
-      md_.parse(StoreResult(std::string(value_str)));
-//      std::cout << md_.dirent_.d_name << std::endl;
-      if (key.inode_ == prefix_ && md_.dirent_.d_off == offset) {
-        delete iter;
-        return StoreResult(std::string(value_str));
-      }
-    }
-  }
-  delete (iter);
-//  delete(lo_ptr);
-//  delete(up_ptr);
-  // not found
-  return StoreResult();
-}
-StoreResult RocksDBStore::seek_at(const std::string &key, const uint64_t &postfix_, const kvfsDirKey &owner) {
-  auto iter = db_handle->db->NewIterator(ReadOptions());
-  for (iter->Seek(key); iter->Valid(); iter->Next()) {
-    auto key_str = iter->key().ToString();
-    auto value_str = iter->value().ToString();
-
-    if (iter->value().size() == sizeof(kvfsBlockValue) && iter->key().size() == sizeof(kvfsBlockKey)) {
-      kvfsBlockKey key{};
-      key.parse(key_str);
-      if (key.offset_ != postfix_) {
-        continue;
-      }
-      // it is the block offset we seek so we check owner
-      kvfsBlockValue bv_;
-      bv_.parse(StoreResult(std::string(value_str)));
-      if (bv_.owener_ == owner) {
-        // we have found the block
-        // return the value
-        delete iter;
-        return StoreResult(std::string(value_str));
-      }
-    }
-  }
-
-  // not found
-  return StoreResult();
 }
 
 }//namespace kvfs

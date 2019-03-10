@@ -53,6 +53,7 @@ struct kvfsDirKey {
 
 struct kvfsBlockKey {
   uint64_t offset_{};
+  kvfs_file_inode_t inode_{};
   uint64_t block_number_{};
 
   std::string pack() const {
