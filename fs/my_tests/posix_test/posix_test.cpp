@@ -11,10 +11,58 @@
 #include <string>
 #include <zconf.h>
 #include <iostream>
-#include <dirent.h>
-#include <sys/stat.h>
 #include <chrono>
 #include <cstring>
+#include <fcntl.h>
+
+void write_read_test() {
+  int flags = O_CREAT;
+  flags |= O_RDWR | O_APPEND;
+  std::cout << "File opened with flags: " << flags << std::endl;
+  mode_t mode = geteuid();
+//  std::string file_name = "../..////./Hi.txt";
+  std::string file_name = "Hi.txt";
+
+  auto data = "123456789abcdefghijklmnop"; // 25 bytes
+  size_t data_size = strlen(data);
+
+  auto start = std::chrono::high_resolution_clock::now();
+
+  int fd_ = open(file_name.c_str(), flags, mode);
+
+  int TOTAL_DATA = 100000;
+
+  const void *buffer_w = data;
+
+  int total_data_size = 0;
+
+  for (int i = 0; i < TOTAL_DATA; i++) {
+
+    ssize_t size = write(fd_, buffer_w, data_size);
+
+    total_data_size += size;
+
+  }
+  std::cout << "Wrote : " << total_data_size << std::endl;
+  total_data_size = 0;
+
+  for (int i = 0; i < TOTAL_DATA; ++i) {
+
+    void *buffer_r = std::malloc(data_size);
+
+    auto cur_read = pread(fd_, buffer_r, data_size, total_data_size);
+    free(buffer_r);
+
+    total_data_size += cur_read;
+  }
+  std::cout << "Read : " << total_data_size << std::endl;
+  fsync(fd_);
+  close(fd_);
+
+  auto finish = std::chrono::high_resolution_clock::now();
+
+  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms\n";
+}
 
 int main() {
   auto contents = "123456789abcdefghijklmnop";
@@ -35,7 +83,7 @@ int main() {
   }
 
   remove("/tmp/something.txt");*/
-  mode_t mode = geteuid();
+  /*mode_t mode = geteuid();
   auto directory = opendir(get_current_dir_name());
   auto start = std::chrono::high_resolution_clock::now();
 
@@ -59,7 +107,7 @@ int main() {
 
   std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ns\n";
 
-  system("rm -r ./myfiles*");
+  system("rm -r ./myfiles*");*/
 
 /*  auto file = open("/tmp/something.txt", mode);
   write(file ,contents, strlen(contents));
@@ -76,5 +124,6 @@ int main() {
 
   remove("/tmp/something.txt");*/
 
+  write_read_test();
   return 0;
 }

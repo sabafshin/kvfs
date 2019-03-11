@@ -5,12 +5,6 @@
 [submodule "third_party/spdk"]
 	path = third_party/spdk
 	url = git@github.com:spdk/spdk.git
-[submodule "third_party/leveldb"]
-	path = third_party/leveldb
-	url = git@github.com:google/leveldb.git
-[submodule "fs/kvfs_rocksdb/third_party/rocksdb"]
-	path = fs/kvfs_rocksdb/third_party/rocksdb
-	url = git@github.com:facebook/rocksdb.git
 [submodule "fs/kvfs_leveldb/third_party/leveldb"]
 	path = fs/kvfs_leveldb/third_party/leveldb
 	url = https://github.com/google/leveldb.git

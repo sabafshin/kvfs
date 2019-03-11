@@ -833,6 +833,7 @@ int KVFS::Link(const char *oldname, const char *newname) {
   return 0;
 }
 int KVFS::SymLink(const char *oldname, const char *newname) {
+
   return 0;
 }
 ssize_t KVFS::ReadLink(const char *filename, char *buffer, size_t size) {

@@ -12,10 +12,10 @@
 
 #include <memory>
 #include <string>
-#include <rocksdb/db.h>
 #include <kvfs_config.h>
-#include "rocksdb/utilities/transaction.h"
-#include "rocksdb/utilities/transaction_db.h"
+#include "../../third_party/rocksdb/include/rocksdb/db.h"
+#include "../../third_party/rocksdb/include/rocksdb/status.h"
+#include "../../third_party/rocksdb/include/rocksdb/cache.h"
 
 using rocksdb::DB;
 using rocksdb::Options;

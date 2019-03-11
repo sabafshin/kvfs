@@ -5,8 +5,9 @@
 # CMakeList.txt : Top-level CMake project file, do global configuration
 # and include sub-projects here.
 #
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.9)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(PROJECT_NAME "kvfs")
 project(${PROJECT_NAME} LANGUAGES CXX)
@@ -22,37 +23,6 @@ configure_file(
     ${PROJECT_SOURCE_DIR}/CMake/kvfs-config.h.in
     config/kvfs_config.h
 )
-
-########## RocksDB Config #########################################
-
-#### Disable RocksDB test build ##########
-option(WITH_GFLAGS "build with GFlags" OFF)
-option(WITH_MD_LIBRARY "build with MD" OFF)
-option(WITH_FALLOCATE "build with fallocate" OFF)
-option(WITH_TESTS "build with tests" OFF)
-option(WITH_TOOLS "build with tools" OFF)
-##########################################
-
-set(ROCKSDB_STATIC_LIB rocksdb${ARTIFACT_SUFFIX})
-set(ROCKSDB_SHARED_LIB rocksdb-shared${ARTIFACT_SUFFIX})
-set(ROCKSDB_IMPORT_LIB ${ROCKSDB_SHARED_LIB})
-
-if (WIN32)
-  set(SYSTEM_LIBS ${SYSTEM_LIBS} Shlwapi.lib Rpcrt4.lib)
-  set(LIBS ${ROCKSDB_STATIC_LIB} ${ROCKSDB_IMPORT_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
-else ()
-  set(SYSTEM_LIBS ${CMAKE_THREAD_LIBS_INIT})
-  set(LIBS ${ROCKSDB_SHARED_LIB} ${ROCKSDB_IMPORT_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
-endif ()
-
-set(ROCKSDB_SOURCE_DIR ${PROJECT_SOURCE_DIR}/third_party/rocksdb)
-
-add_subdirectory(${ROCKSDB_SOURCE_DIR})
-
-include_directories(${ROCKSDB_SOURCE_DIR}/include)
-include_directories(${ROCKSDB_SOURCE_DIR}/util)
-
-########## RocksDB Config #########################################
 
 include_directories(${PROJECT_SOURCE_DIR}/config)
 include_directories(${PROJECT_SOURCE_DIR}/fs)

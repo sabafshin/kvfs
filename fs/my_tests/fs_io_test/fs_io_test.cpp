@@ -55,7 +55,7 @@ int main() {
 
   //////////////////////////////////////////////
 
-  int TOTAL_DATA = 100000;
+  int TOTAL_DATA = 10000;
 
   const void *buffer_w = data;
 
@@ -86,7 +86,7 @@ int main() {
 
   auto finish = std::chrono::high_resolution_clock::now();
 
-  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ns\n";
+  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms\n";
 
   fs_->DestroyFS();
   fs_.reset();

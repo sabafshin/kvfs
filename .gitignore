@@ -8,9 +8,6 @@ install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
 
-.idea
-cmake-build-debug/
-
+.idea/
+cmake-build*
 build
-.vs
-.vscode
