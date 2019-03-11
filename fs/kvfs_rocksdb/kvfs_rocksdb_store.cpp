@@ -8,7 +8,7 @@
  */
 
 #include <iostream>
-#include "rocksdb_store.h"
+#include "kvfs_rocksdb_store.h"
 
 using std::vector;
 

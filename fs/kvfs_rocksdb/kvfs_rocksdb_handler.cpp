@@ -10,7 +10,7 @@
 #include <rocksdb/slice_transform.h>
 #include <rocksdb/table.h>
 #include <rocksdb/filter_policy.h>
-#include "rocksdb_handler.h"
+#include "kvfs_rocksdb_handler.h"
 namespace kvfs {
 
 RocksHandles::~RocksHandles() {

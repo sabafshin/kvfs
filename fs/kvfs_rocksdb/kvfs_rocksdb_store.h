@@ -10,8 +10,8 @@
 #ifndef KVFS_ROCKSDB_STORE_HPP
 #define KVFS_ROCKSDB_STORE_HPP
 
-#include "rocksdb_handler.h"
-#include "rocksdb_exception.h"
+#include "kvfs_rocksdb_handler.h"
+#include "kvfs_rocksdb_exception.h"
 
 #include <store/store.h>
 #include <store/store_entry.h>
