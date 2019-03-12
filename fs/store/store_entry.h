@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <zconf.h>
 #include <kvfs/kvfs_dirent.h>
+#include <filesystem>
 
 namespace kvfs {
 enum class StoreEntryType : uint8_t {
@@ -175,6 +176,8 @@ struct kvfsMetaData {
     fstat_.st_size = 0;
     // set parent
     parent_key_ = parent;
+    real_key_.inode_ = inode;
+    real_key_.hash_ = std::filesystem::hash_value(name);
   }
 
   void parse(const kvfs::StoreResult &result) {

@@ -7,7 +7,7 @@
  *      File:   store_test.cpp
  */
 
-#include <kvfs_rocksdb/rocksdb_store.h>
+#include <kvfs_rocksdb/kvfs_rocksdb_store.h>
 #include <inodes/inode_cache.h>
 #include <inodes/directory_entry_cache.h>
 #include <iostream>

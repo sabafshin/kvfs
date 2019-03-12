@@ -10,7 +10,7 @@
 #ifndef KVFS_ROCKSDB_ROCKS_DB_EXCEPTION_HPP
 #define KVFS_ROCKSDB_ROCKS_DB_EXCEPTION_HPP
 
-#include <rocksdb/db.h>
+#include "rocksdb/db.h"
 
 namespace kvfs {
 

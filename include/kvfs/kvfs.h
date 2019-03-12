@@ -10,7 +10,7 @@
 #ifndef KVFS_FILESYSTEM_H
 #define KVFS_FILESYSTEM_H
 
-#include <kvfs_rocksdb/rocksdb_store.h>
+#include <kvfs_rocksdb/kvfs_rocksdb_store.h>
 #include <inodes/directory_entry_cache.h>
 #include <inodes/inode_cache.h>
 #include <kvfs/super.h>
@@ -29,6 +29,7 @@
 #include <string.h>
 #include <cstring>
 #include <linux/fs.h>
+#include <unistd.h>
 
 namespace kvfs {
 
@@ -43,19 +44,19 @@ class KVFS : public FS {
  protected:
   char *GetCWD(char *buffer, size_t size) override;
   char *GetCurrentDirName() override;
-  int ChDir(const char *filename) override;
+  int ChDir(const char *path) override;
   kvfsDIR *OpenDir(const char *path) override;
   kvfs_dirent *ReadDir(kvfsDIR *dirstream) override;
   int CloseDir(kvfsDIR *dirstream) override;
   int Link(const char *oldname, const char *newname) override;
-  int SymLink(const char *oldname, const char *newname) override;
+  int SymLink(const char *path1, const char *path2) override;
   ssize_t ReadLink(const char *filename, char *buffer, size_t size) override;
   int UnLink(const char *filename) override;
   int RmDir(const char *filename) override;
   int Remove(const char *filename) override;
   int Rename(const char *oldname, const char *newname) override;
   int MkDir(const char *filename, mode_t mode) override;
-  int Stat(const char *filename, struct stat *buf) override;
+  int Stat(const char *filename, kvfs_stat *buf) override;
   int ChMod(const char *filename, mode_t mode) override;
   int Access(const char *filename, int how) override;
   int UTime(const char *filename, const struct utimbuf *times) override;
@@ -74,7 +75,7 @@ class KVFS : public FS {
                         ssize_t length,
                         unsigned int flags) override;
   void Sync() override;
-  int FSync(int fildes) override;
+  int FSync(int filedes) override;
   ssize_t PRead(int filedes, void *buffer, size_t size, off_t offset) override;
   ssize_t PWrite(int filedes, const void *buffer, size_t size, off_t offset) override;
   void DestroyFS() override;
@@ -97,7 +98,7 @@ class KVFS : public FS {
   bool CheckNameLength(const std::filesystem::path &path);
   std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> ResolvePath(const std::filesystem::path &input);
   inline bool starts_with(const std::string &s1, const std::string &s2);
-  std::filesystem::path GetSymLinkRealPath(const kvfsMetaData &data);
+  std::filesystem::path GetSymLinkContentsPath(const kvfsMetaData &data);
   kvfs_file_inode_t GetFreeInode();
   bool FreeUpBlock(const kvfsBlockKey &key);
   kvfsBlockKey GetFreeBlock();
@@ -117,6 +118,8 @@ class KVFS : public FS {
                      size_t buffer_size_,
                      off_t offset,
                      void *buffer);
+  std::pair<std::filesystem::path,
+            std::pair<kvfs::kvfsDirKey, kvfs::kvfsMetaData>> RealPath(const std::filesystem::path &input);
 };
 
 }  // namespace kvfs

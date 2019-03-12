@@ -13,6 +13,7 @@
 #include <exception>
 #include <string>
 #include <errno.h>
+#include <iostream>
 
 namespace kvfs {
 enum class FSErrorType : uint8_t {
@@ -34,7 +35,8 @@ enum class FSErrorType : uint8_t {
   FS_EISDIR,
   FS_EFTYPE,
   FS_ENAMETOOLONG,
-  FS_ENFILE
+  FS_ENFILE,
+  FS_ELOOP
 };
 
 class FSError : public std::exception {

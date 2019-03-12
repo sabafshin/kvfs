@@ -24,6 +24,30 @@ configure_file(
     config/kvfs_config.h
 )
 
+option(BuildWithRocksDB "BuildWithRocksDB" ON)
+option(BuildWithLevelDB "BuildWithLevelDB" OFF)
+
+if (BuildWithRocksDB)
+  ########## RocksDB Config #########################################
+  #### Disable RocksDB test build ##########
+  option(WITH_GFLAGS "build with GFlags" OFF)
+  option(WITH_MD_LIBRARY "build with MD" OFF)
+  option(WITH_FALLOCATE "build with fallocate" OFF)
+  option(WITH_TESTS "build with tests" OFF)
+  option(WITH_TOOLS "build with tools" OFF)
+  ##########################################
+  set(ROCKSDB_STATIC_LIB rocksdb${ARTIFACT_SUFFIX})
+  set(ROCKSDB_SHARED_LIB rocksdb-shared${ARTIFACT_SUFFIX})
+  set(ROCKSDB_IMPORT_LIB ${ROCKSDB_SHARED_LIB})
+  set(SYSTEM_LIBS ${CMAKE_THREAD_LIBS_INIT})
+  set(LIBS ${ROCKSDB_SHARED_LIB} ${ROCKSDB_IMPORT_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
+  set(ROCKSDB_SOURCE_DIR ${PROJECT_SOURCE_DIR}/third_party/rocksdb)
+  add_subdirectory(${ROCKSDB_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/third_party/rocksdb)
+  include_directories(${ROCKSDB_SOURCE_DIR})
+  include_directories(${ROCKSDB_SOURCE_DIR}/include)
+  ########## RocksDB Config #########################################
+endif ()
+
 include_directories(${PROJECT_SOURCE_DIR}/config)
 include_directories(${PROJECT_SOURCE_DIR}/fs)
 include_directories(${PROJECT_SOURCE_DIR}/include)

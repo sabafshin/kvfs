@@ -13,9 +13,9 @@
 #include <memory>
 #include <string>
 #include <kvfs_config.h>
-#include "../../third_party/rocksdb/include/rocksdb/db.h"
-#include "../../third_party/rocksdb/include/rocksdb/status.h"
-#include "../../third_party/rocksdb/include/rocksdb/cache.h"
+#include "rocksdb/db.h"
+#include "rocksdb/status.h"
+#include "rocksdb/cache.h"
 
 using rocksdb::DB;
 using rocksdb::Options;

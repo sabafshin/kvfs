@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(PROJECT_NAME "kvfs_rocksdb")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
-#### Disable RocksDB test build ##########
+#[[#### Disable RocksDB test build ##########
 option(WITH_GFLAGS "build with GFlags" OFF)
 option(WITH_MD_LIBRARY "build with MD" OFF)
 option(WITH_FALLOCATE "build with fallocate" OFF)
@@ -20,10 +20,10 @@ set(ROCKSDB_STATIC_LIB rocksdb${ARTIFACT_SUFFIX})
 set(ROCKSDB_SHARED_LIB rocksdb-shared${ARTIFACT_SUFFIX})
 set(ROCKSDB_IMPORT_LIB ${ROCKSDB_SHARED_LIB})
 
-#[[if ( WIN32 )
+#[=[if ( WIN32 )
     set ( SYSTEM_LIBS ${SYSTEM_LIBS} Shlwapi.lib Rpcrt4.lib )
     set ( LIBS ${ROCKSDB_STATIC_LIB} ${ROCKSDB_IMPORT_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} )
-else ()]]
+else ()]=]
 set(SYSTEM_LIBS ${CMAKE_THREAD_LIBS_INIT})
 set(LIBS ${ROCKSDB_SHARED_LIB} ${ROCKSDB_IMPORT_LIB} ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
 #endif ()
@@ -34,7 +34,7 @@ add_subdirectory(${ROCKSDB_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/../../third_p
 
 include_directories(${ROCKSDB_SOURCE_DIR})
 include_directories(${ROCKSDB_SOURCE_DIR}/include)
-########## RocksDB Config #########################################
+########## RocksDB Config #########################################]]
 
 set(KVFS_ROCKSDB_STORE_SRCS
     kvfs_rocksdb_handler.cpp
@@ -59,8 +59,7 @@ add_library(
 )
 target_link_libraries(
     ${PROJECT_NAME}
-    LINK_PUBLIC
+    PRIVATE
     ${LIBS}
     ${SYSTEM_LIBS}
 )
-target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

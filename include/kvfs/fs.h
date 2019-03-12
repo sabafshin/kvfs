@@ -77,7 +77,7 @@ class FS {
     * EIO
     *      An I/O error occurred.
     */
-  virtual int ChDir(const char *filename) = 0;
+  virtual int ChDir(const char *path) = 0;
 
   /**
     * @brief The opendir function opens and returns a directory stream for reading the directory
@@ -142,8 +142,8 @@ class FS {
 
   /**
    * The symlink function makes a symbolic link to oldname named newname.
-   * @param oldname
-   * @param newname
+   * @param path1
+   * @param path2
    * @return The normal return value from symlink is 0. A return value of -1 indicates an error.
    * In addition to the usual file name syntax errors (see File Name Errors),
    * the following errno error conditions are defined for this function:
@@ -156,7 +156,7 @@ class FS {
    * EIO
    *    A hardware error occurred while reading or writing data on the disk.
    */
-  virtual int SymLink(const char *oldname, const char *newname) = 0;
+  virtual int SymLink(const char *path1, const char *path2) = 0;
 
   /**
    * The readlink function gets the value of the symbolic link filename.
@@ -306,7 +306,7 @@ class FS {
    * ENOENT
    * The file named by filename doesn’t exist.
    */
-  virtual int Stat(const char *filename, struct stat *buf) = 0;
+  virtual int Stat(const char *filename, kvfs_stat *buf) = 0;
 
   /**
    * The chmod function sets the access permission bits for the file named by filename to mode.
@@ -670,7 +670,7 @@ In addition, copy_file_range can fail with the error codes which are used by rea
 
   /**
    * The fsync function can be used to make sure all data associated with the open file fildes is written to the device associated with the descriptor. The function call does not return unless all actions have finished.
-   * @param fildes
+   * @param filedes
    * @return
    * The return value of the function is zero if no error occurred. Otherwise it is -1 and the global variable errno is set to the following values:
 
@@ -682,7 +682,7 @@ EINVAL
     No synchronization is possible since the system does not implement this.
 
    */
-  virtual int FSync(int fildes) = 0;
+  virtual int FSync(int filedes) = 0;
   /**
    * The pread function is similar to the read function. The first three arguments are identical, and the return values and error codes also correspond.
 

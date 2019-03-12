@@ -54,6 +54,8 @@ FSError::FSError
       break;
     case FSErrorType::FS_ENFILE:full_msg_ += "(ENFILE) ";
       break;
+    case FSErrorType::FS_ELOOP:full_msg_ += "(ELOOP) ";
+      break;
   }
 
   full_msg_ += "(" + msg_ + ")";

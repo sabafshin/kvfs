@@ -8,6 +8,7 @@
  */
 
 #include <kvfs/kvfs.h>
+#include <utime.h>
 
 namespace kvfs {
 kvfs::KVFS::KVFS(const std::string &mount_path)
@@ -76,9 +77,57 @@ char *kvfs::KVFS::GetCurrentDirName() {
   }
   return pwd_.string().data();
 }
-int kvfs::KVFS::ChDir(const char *filename) {
+int kvfs::KVFS::ChDir(const char *path) {
+  std::filesystem::path orig_ = std::filesystem::path(path);
+  if (orig_.is_relative()) {
+    // make it absolute
+    std::filesystem::path prv_ = pwd_;
+    orig_ = pwd_.append(orig_.string());
+    pwd_ = prv_;
+  }
+  if (orig_.is_absolute()) {
+    // must start with single "/"
+    if (orig_.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
 
-  return 0;
+  // Attemp to resolve the real path from given path
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
+
+  // retrieve the filename from store, if it doesn't exist then error
+  kvfsDirKey key_ = {resolved.second.second.fstat_.st_ino, std::filesystem::hash_value(resolved.first.filename())};
+  mutex_->lock();
+  StoreResult sr = store_->get(key_.pack());
+  mutex_->unlock();
+  if (sr.isValid()) {
+    // found the file, check if it is a directory
+    kvfsMetaData md_;
+    md_.parse(sr);
+    if (S_ISLNK(md_.fstat_.st_mode)) {
+      // it is symbolic link get the real metadata
+      mutex_->lock();
+      StoreResult sr = store_->get(key_.pack());
+      mutex_->unlock();
+      if (sr.isValid()) {
+        md_.parse(sr);
+      }
+    }
+    if (!S_ISDIR(md_.fstat_.st_mode)) {
+      errorno_ = -ENOTDIR;
+      throw FSError(FSErrorType::FS_ENOTDIR, "A component of the pathname names an existing file that is neither "
+                                             "a directory nor a symbolic link to a directory.");
+    }
+    mutex_->lock();
+    current_md_ = md_;
+    current_key_ = key_;
+    cwd_name_ = resolved.first.filename();
+    pwd_ = resolved.first;
+    mutex_->unlock();
+    return 0;
+  }
+  errorno_ = -ENONET;
+  return errorno_;
 }
 kvfsDIR *KVFS::OpenDir(const char *path) {
   std::filesystem::path orig_ = std::filesystem::path(path);
@@ -96,7 +145,7 @@ kvfsDIR *KVFS::OpenDir(const char *path) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = ResolvePath(orig_);
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
 
   // lock
   mutex_->lock();
@@ -109,7 +158,7 @@ kvfsDIR *KVFS::OpenDir(const char *path) {
   }
 
   kvfsDirKey key = {resolved.second.first.inode_, hash};
-  const string &key_str = key.pack();
+  const std::string &key_str = key.pack();
   if (!store_->hasKey(key_str)) {
     // does not exist return error
     errorno_ = -ENONET;
@@ -136,20 +185,11 @@ kvfsDIR *KVFS::OpenDir(const char *path) {
 
     open_fds_->insert(fd_, fh_);
 
-    // set current key to this one
-//    current_key_ = key;
-//    current_md_ = md_;
-
-//    cwd_name_.append(md_.dirent_.d_name);
-//    pwd_.append(resolved.first.string());
-
     //unlock
     mutex_->unlock();
-
     //success
     kvfsDIR *result = new kvfsDIR();
     result->file_descriptor_ = fd_;
-//    result->offset_ = 0;
     result->ptr_ = store_->get_iterator();
     kvfsDirKey seek_key = {md_.fstat_.st_ino, 0};
     result->ptr_->Seek(seek_key.pack());
@@ -175,21 +215,10 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = ResolvePath(orig_);
-
-//  std::cout << resolved_path_ << std::endl;
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
 
   // now the path components all exist and resolved
-  // check for O_CREAT flag
-
-//  InodeCacheEntry handle;
-//  InodeAccessMode access_mode;
-  if ((flags & O_ACCMODE) == O_RDONLY) {
-//    access_mode = INODE_READ;
-  } else if ((flags & O_ACCMODE) == O_WRONLY) {
-//    access_mode = INODE_WRITE;
-  } else if ((flags & O_ACCMODE) == O_RDWR) {
-//    access_mode = INODE_RW;
+  if ((flags & O_ACCMODE) == O_RDONLY || (flags & O_ACCMODE) == O_WRONLY || (flags & O_ACCMODE) == O_RDWR) {
   } else {
     // undefined access mode flags
     return -EINVAL;
@@ -352,7 +381,6 @@ bool kvfs::KVFS::CheckNameLength(const std::filesystem::path &path) {
 
 std::pair<std::filesystem::path,
           std::pair<kvfsDirKey, kvfsMetaData>> kvfs::KVFS::ResolvePath(const std::filesystem::path &input) {
-//  std::cout << input << std::endl;
   std::filesystem::path output;
   kvfs_file_inode_t inode = 0;
   int invalid_count = 0;
@@ -388,7 +416,7 @@ std::pair<std::filesystem::path,
           // we occurred a symbolic link, prefix the path with the contents
           // of this link
           mutex_->unlock();
-          output = GetSymLinkRealPath(md_);
+          output = GetSymLinkContentsPath(md_);
           parent_key_ = md_.real_key_;
         } else {
           parent_key_ = key;
@@ -415,30 +443,17 @@ std::pair<std::filesystem::path,
 
   return std::pair(output, std::pair(parent_key_, parent_md_));
 }
-std::filesystem::path kvfs::KVFS::GetSymLinkRealPath(const kvfs::kvfsMetaData &data) {
-  std::filesystem::path output = "/";
+std::filesystem::path kvfs::KVFS::GetSymLinkContentsPath(const kvfs::kvfsMetaData &data) {
+  std::filesystem::path output;
   std::list<std::filesystem::path> path_list;
-  path_list.push_front(data.dirent_.d_name);
-  // lock for cache access
-  mutex_->lock();
-  kvfsDirKey key = data.parent_key_;
-  kvfsMetaData md_;
-  errorno_ = -0;
-  while (key.inode_ > 0) {
-    if (store_->hasKey(key.pack())) {
-      StoreResult sr = store_->get(key.pack());
-      md_.parse(sr);
-      key = md_.parent_key_;
-      path_list.push_front(md_.dirent_.d_name);
-    } else {
-      errorno_ = -ENONET;
-      throw FSError(FSErrorType::FS_ENOENT, "No such file or directory found.");
-    }
-  }
-  for (const auto &p : path_list) {
-    output.append(p.string());
-  }
-  mutex_->unlock();
+  kvfsBlockKey blck_key = {data.fstat_.st_ino, 0};
+  errorno_ = 0;
+  // read contents of the symlink block and convert it to a path
+  void *buffer = malloc(static_cast<size_t>(data.fstat_.st_size));
+  size_t blcks_to_read = static_cast<size_t>(data.last_block_key_.block_number_);
+  ssize_t read = ReadBlocks(blck_key, blcks_to_read, static_cast<size_t>(data.fstat_.st_size), 0, buffer);
+  output = (char *) buffer;
+  free(buffer);
   return output;
 }
 bool kvfs::KVFS::starts_with(const std::string &s1, const std::string &s2) {
@@ -548,11 +563,6 @@ ssize_t kvfs::KVFS::Read(int filedes, void *buffer, size_t size) {
 
   // check flags first
 
-  if ((fh_.flags_ & O_NONBLOCK) > 0) {
-    // return error without writing anything
-    errorno_ = -ECANCELED;
-    return errorno_;
-  }
 
   if ((fh_.flags_ & O_RDONLY) == 0) {
     // file was not opened with read flag
@@ -587,11 +597,6 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
   }
   // check flags first
 
-  if ((fh_.flags_ & O_NONBLOCK) > 0) {
-    // return without writting anything
-    errorno_ = -ECANCELED;
-    return errorno_;
-  }
   // check if O_APPEND is set, then always append
   bool append_only = (fh_.flags_ & O_APPEND) > 0;
   if (append_only) {
@@ -830,14 +835,184 @@ int KVFS::CloseDir(kvfsDIR *dirstream) {
   }
 }
 int KVFS::Link(const char *oldname, const char *newname) {
-  return 0;
-}
-int KVFS::SymLink(const char *oldname, const char *newname) {
 
-  return 0;
+  std::filesystem::path orig_old = std::filesystem::path(oldname);
+  std::filesystem::path orig_new = std::filesystem::path(oldname);
+  if (orig_old.is_relative()) {
+    // make it absolute
+    std::filesystem::path prv_ = pwd_;
+    orig_old = pwd_.append(orig_old.string());
+    pwd_ = prv_;
+  }
+  if (orig_old.is_absolute()) {
+    // must start with single "/"
+    if (orig_old.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
+  if (orig_new.is_relative()) {
+    // make it absolute
+    std::filesystem::path prv_ = pwd_;
+    orig_new = pwd_.append(orig_new.string());
+    pwd_ = prv_;
+  }
+  if (orig_new.is_absolute()) {
+    // must start with single "/"
+    if (orig_new.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
+
+  // Attemp to resolve the real path from given path
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved_old = RealPath(orig_old);
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved_new = RealPath(orig_new);
+
+  // create a new link (directory entry) for the existing file
+
+  // check if old name exists
+
+  kvfsDirKey
+      old_key = {resolved_old.second.second.fstat_.st_ino, std::filesystem::hash_value(resolved_old.first.filename())};
+  mutex_->lock();
+  StoreResult sr = store_->get(old_key.pack());
+  mutex_->unlock();
+
+  if (!sr.isValid()) {
+    errorno_ = -ENONET;
+    throw FSError(FSErrorType::FS_ENOENT, "A component of either path prefix does not exist; "
+                                          "the file named by path1 does not exist; or path1 or path2 points to an empty string.");
+  }
+  kvfsMetaData old_md_;
+  old_md_.parse(sr);
+  kvfsDirKey
+      new_key = {resolved_new.second.second.fstat_.st_ino, std::filesystem::hash_value(resolved_new.first.filename())};
+  // set the inode of this new link to the inode of the original file
+  kvfsMetaData new_md_ = kvfsMetaData(resolved_new.first.filename(), old_md_.fstat_.st_ino,
+                                      resolved_new.second.second.fstat_.st_mode, resolved_new.second.first);
+  if (old_md_.real_key_ != old_key) {
+    // check if original exists, if it doesn't exist then make the old one original
+    mutex_->lock();
+    StoreResult sr = store_->get(old_md_.real_key_.pack());
+    mutex_->unlock();
+    if (!sr.isValid()) {
+      old_md_.real_key_ = old_key;
+      --old_md_.fstat_.st_nlink;
+    } else {
+      kvfsMetaData original_md_;
+      original_md_.parse(sr);
+      ++original_md_.fstat_.st_nlink;
+      mutex_->lock();
+      store_->merge(old_md_.real_key_.pack(), original_md_.pack());
+      mutex_->unlock();
+    }
+  }
+  new_md_.real_key_ = old_md_.real_key_; // set real key to old key, needed to resolve links and avoid infinite loops
+  ++new_md_.fstat_.st_nlink;
+  ++old_md_.fstat_.st_nlink;
+  old_md_.fstat_.st_atim.tv_sec = time_now;
+  old_md_.fstat_.st_mtim.tv_sec = time_now;
+  mutex_->lock();
+  bool status1 = store_->merge(old_key.pack(), old_md_.pack());
+  bool status2 = store_->put(new_key.pack(), new_md_.pack());
+  mutex_->unlock();
+  return status1 & status2;
+}
+int KVFS::SymLink(const char *path1, const char *path2) {
+  std::filesystem::path orig_path2 = std::filesystem::path(path1);
+  if (orig_path2.is_relative()) {
+    // make it absolute
+    std::filesystem::path prv_ = pwd_;
+    orig_path2 = pwd_.append(orig_path2.string());
+    pwd_ = prv_;
+  }
+  if (orig_path2.is_absolute()) {
+    // must start with single "/"
+    if (orig_path2.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved_path_2 = RealPath(orig_path2);
+  // The symlink() function shall create a symbolic link called path2 that contains the string pointed to by path1
+  // (path2 is the name of the symbolic link created, path1 is the string contained in the symbolic link).
+  //The string pointed to by path1 shall be treated only as a string and shall not be validated as a pathname.
+
+  kvfsDirKey slkey_ =
+      {resolved_path_2.second.second.fstat_.st_ino, std::filesystem::hash_value(resolved_path_2.first.filename())};
+  // check if the key names an existing file
+  mutex_->lock();
+  StoreResult sr = store_->get(slkey_.pack());
+  mutex_->unlock();
+  if (sr.isValid()) {
+    // return error EEXISTS
+    errorno_ = -EEXIST;
+    throw FSError(FSErrorType::FS_EEXIST, "The path2 argument names an existing file.");
+  }
+  // create the symlink
+  kvfsMetaData slmd_ =
+      kvfsMetaData(resolved_path_2.first.filename(),
+                   GetFreeInode(),
+                   S_IFLNK | resolved_path_2.second.second.fstat_.st_mode,
+                   resolved_path_2.second.first);
+
+  kvfsBlockKey sl_blck_key = kvfsBlockKey(slmd_.fstat_.st_ino, 0);
+  size_t blcks_to_write = strlen(path1) / KVFS_DEF_BLOCK_SIZE;
+  blcks_to_write += (strlen(path1) % KVFS_DEF_BLOCK_SIZE) ? 1 : 0;
+  auto pair = WriteBlocks(sl_blck_key, blcks_to_write, path1, strlen(path1), 0);
+  slmd_.last_block_key_ = pair.second;
+  slmd_.fstat_.st_size = pair.first;
+
+  mutex_->lock();
+  bool status1 = store_->put(slkey_.pack(), slmd_.pack());
+  mutex_->unlock();
+
+  return status1;
 }
 ssize_t KVFS::ReadLink(const char *filename, char *buffer, size_t size) {
-  return 0;
+  // The readlink() function shall place the contents of the symbolic link referred to by path in the buffer buf which
+  // has size bufsize. If the number of bytes in the symbolic link is less than bufsize, the contents of the remainder
+  // of buf are unspecified. If the buf argument is not large enough to contain the link content, the first bufsize
+  // bytes shall be placed in buf.
+
+  std::filesystem::path orig_ = std::filesystem::path(filename);
+  if (orig_.is_relative()) {
+    // make it absolute
+    std::filesystem::path prv_ = pwd_;
+    orig_ = pwd_.append(orig_.string());
+    pwd_ = prv_;
+  }
+  if (orig_.is_absolute()) {
+    // must start with single "/"
+    if (orig_.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
+
+  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, std::filesystem::hash_value(resolved.first.filename())};
+  // check if the key names an existing file
+  mutex_->lock();
+  StoreResult sr = store_->get(key.pack());
+  mutex_->unlock();
+  if (!sr.isValid()) {
+    errorno_ = -ENONET;
+    throw FSError(FSErrorType::FS_ENOENT,
+                  "A component of path does not name an existing file or path is an empty string.");
+  }
+  kvfsMetaData md_;
+  md_.parse(sr);
+  // check if it is a symlink
+  if (!S_ISLNK(md_.fstat_.st_mode)) {
+    // not a symlink
+    // retrun -1
+    errorno_ = -ENOLINK;
+    return errorno_;
+  }
+  kvfsBlockKey blck_key_ = kvfsBlockKey(md_.fstat_.st_ino, 0);
+  ssize_t size_to_read = (size > md_.fstat_.st_size ? md_.fstat_.st_size : size);
+  size_t blcks_to_read = size_to_read / KVFS_DEF_BLOCK_SIZE;
+  blcks_to_read += (size_to_read % KVFS_DEF_BLOCK_SIZE) ? 1 : 0;
+  ssize_t pair = ReadBlocks(blck_key_, blcks_to_read, size, 0, buffer);
+  return pair;
 }
 int KVFS::UnLink(const char *filename) {
   return 0;
@@ -867,7 +1042,7 @@ int KVFS::MkDir(const char *filename, mode_t mode) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = ResolvePath(orig_);
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
 
   // now try to make dir at that parent directory
   // so get file name of parent directory
@@ -884,7 +1059,10 @@ int KVFS::MkDir(const char *filename, mode_t mode) {
     errorno_ = -EEXIST;
     mutex_->unlock();
   }
-  kvfsMetaData md_ = kvfsMetaData(resolved.first.filename(), GetFreeInode(), mode, current_key_);
+  kvfsMetaData md_ = kvfsMetaData(resolved.first.filename(),
+                                  GetFreeInode(),
+                                  mode | resolved.second.second.fstat_.st_mode,
+                                  resolved.second.first);
 
   // update meta data
   md_.fstat_.st_mode |= S_IFDIR;
@@ -899,11 +1077,68 @@ int KVFS::MkDir(const char *filename, mode_t mode) {
   mutex_->unlock();
   return 0;
 }
-int KVFS::Stat(const char *filename, struct stat *buf) {
+int KVFS::Stat(const char *filename, kvfs_stat *buf) {
+  std::filesystem::path orig_ = std::filesystem::path(filename);
+  if (orig_.is_relative()) {
+    // make it absolute
+    std::filesystem::path prv_ = pwd_;
+    orig_ = pwd_.append(orig_.string());
+    pwd_ = prv_;
+  }
+  if (orig_.is_absolute()) {
+    // must start with single "/"
+    if (orig_.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
+
+  // Attemp to resolve the real path from given path
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
+
+  // check for existing file
+  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, std::filesystem::hash_value(resolved.first.filename())};
+
+  mutex_->lock();
+  StoreResult sr = store_->get(key.pack());
+  mutex_->unlock();
+  if (!sr.isValid()) {
+    errorno_ = -ENONET;
+    throw FSError(FSErrorType::FS_ENOENT,
+                  "A component of path does not name an existing file or path is an empty string.");
+  }
+  kvfsMetaData md_;
+  md_.parse(sr);
+  *buf = md_.fstat_;
   return 0;
 }
 off_t KVFS::LSeek(int filedes, off_t offset, int whence) {
-  return 0;
+  kvfsFileHandle fh_;
+  bool status = open_fds_->find(filedes, fh_);
+  ssize_t read = 0;
+  if (!status) {
+    errorno_ = -EBADFD;
+    throw FSError(FSErrorType::FS_EBADF, "The file descriptor doesn't name a opened file, invalid fd");
+  }
+
+  //  If whence is SEEK_SET, the file offset shall be set to offset bytes.
+  //  If whence is SEEK_CUR, the file offset shall be set to its current location plus offset.
+  //  If whence is SEEK_END, the file offset shall be set to the size of the file plus offset.
+
+  kvfs_off_t result;
+  if (whence & SEEK_SET) {
+    fh_.offset_ = offset;
+  }
+  if (whence & SEEK_CUR) {
+    fh_.offset_ += offset;
+  }
+  if (whence & SEEK_END) {
+    fh_.md_.fstat_.st_size += offset;
+  }
+  result = fh_.offset_;
+  open_fds_->evict(filedes);
+  open_fds_->insert(filedes, fh_);
+
+  return result;
 }
 ssize_t KVFS::CopyFileRange(int inputfd,
                             off64_t *inputpos,
@@ -911,12 +1146,15 @@ ssize_t KVFS::CopyFileRange(int inputfd,
                             off64_t *outputpos,
                             ssize_t length,
                             unsigned int flags) {
-  return 0;
+  // not implemented
+  return -1;
 }
 void KVFS::Sync() {
-
+  store_->sync();
 }
-int KVFS::FSync(int fildes) {
+int KVFS::FSync(int filedes) {
+  // currently only same as sync
+  this->Sync();
   return 0;
 }
 ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
@@ -930,12 +1168,6 @@ ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
   }
   // check flags first
 
-  if ((fh_.flags_ & O_NONBLOCK) > 0) {
-    // return error without writing anything
-    errorno_ = -ECANCELED;
-    return errorno_;
-  }
-
   /*if ((fh_.flags_ & O_RDONLY) <= 0) {
     // file was not opened with read flag
     return 0;
@@ -943,8 +1175,7 @@ ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
 
   if (offset > fh_.md_.fstat_.st_size) {
     // offset exceeds file size
-    errorno_ = -E2BIG;
-    throw FSError(FSErrorType::FS_EINTR, "The offset argument exceeds the filedes's file size.");
+    return 0;
   }
 
   if (offset == fh_.md_.fstat_.st_size) {
@@ -1011,11 +1242,6 @@ ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset)
   }
   // check flags first
 
-  if ((fh_.flags_ & O_NONBLOCK) > 0) {
-    // return without writting anything
-    errorno_ = -ECANCELED;
-    return errorno_;
-  }
   if (offset > fh_.md_.fstat_.st_size) {
     // offset exceeds file size
     errorno_ = -E2BIG;
@@ -1078,19 +1304,170 @@ ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset)
   return written;
 }
 int KVFS::ChMod(const char *filename, mode_t mode) {
-  return 0;
+  std::filesystem::path orig_ = std::filesystem::path(filename);
+  if (orig_.is_relative()) {
+    // make it absolute
+    std::filesystem::path prv_ = pwd_;
+    orig_ = pwd_.append(orig_.string());
+    pwd_ = prv_;
+  }
+  if (orig_.is_absolute()) {
+    // must start with single "/"
+    if (orig_.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
+
+  // Attemp to resolve the real path from given path
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
+
+  // check for existing file
+  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, std::filesystem::hash_value(resolved.first.filename())};
+
+  mutex_->lock();
+  StoreResult sr = store_->get(key.pack());
+  mutex_->unlock();
+  if (!sr.isValid()) {
+    errorno_ = -ENONET;
+    throw FSError(FSErrorType::FS_ENOENT,
+                  "A component of path does not name an existing file or path is an empty string.");
+  }
+  kvfsMetaData md_;
+  md_.parse(sr);
+  md_.fstat_.st_uid = mode & S_ISUID;
+  md_.fstat_.st_gid = mode & S_ISGID;
+  md_.fstat_.st_mode |= mode;
+  md_.fstat_.st_mtim.tv_sec = time_now;
+
+  mutex_->lock();
+  bool status = store_->merge(key.pack(), md_.pack());
+  mutex_->unlock();
+
+  return status;
 }
 int KVFS::Access(const char *filename, int how) {
+  std::filesystem::path orig_ = std::filesystem::path(filename);
+  if (orig_.is_relative()) {
+    // make it absolute
+    std::filesystem::path prv_ = pwd_;
+    orig_ = pwd_.append(orig_.string());
+    pwd_ = prv_;
+  }
+  if (orig_.is_absolute()) {
+    // must start with single "/"
+    if (orig_.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
+
+  // Attemp to resolve the real path from given path
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
+
+  // check for existing file
+  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, std::filesystem::hash_value(resolved.first.filename())};
+
+  mutex_->lock();
+  StoreResult sr = store_->get(key.pack());
+  mutex_->unlock();
+  if (!sr.isValid()) {
+    errorno_ = -ENONET;
+    throw FSError(FSErrorType::FS_ENOENT,
+                  "A component of path does not name an existing file or path is an empty string.");
+  }
+  kvfsMetaData md_;
+  md_.parse(sr);
+  if (!(md_.fstat_.st_mode & how)) {
+    errorno_ = -EACCES;
+    return errorno_;
+  }
+
   return 0;
 }
 int KVFS::UTime(const char *filename, const struct utimbuf *times) {
-  return 0;
+  std::filesystem::path orig_ = std::filesystem::path(filename);
+  if (orig_.is_relative()) {
+    // make it absolute
+    std::filesystem::path prv_ = pwd_;
+    orig_ = pwd_.append(orig_.string());
+    pwd_ = prv_;
+  }
+  if (orig_.is_absolute()) {
+    // must start with single "/"
+    if (orig_.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
+
+  // Attemp to resolve the real path from given path
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
+
+  // check for existing file
+  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, std::filesystem::hash_value(resolved.first.filename())};
+
+  mutex_->lock();
+  StoreResult sr = store_->get(key.pack());
+  mutex_->unlock();
+  if (!sr.isValid()) {
+    errorno_ = -ENONET;
+    throw FSError(FSErrorType::FS_ENOENT,
+                  "A component of path does not name an existing file or path is an empty string.");
+  }
+  kvfsMetaData md_;
+  md_.parse(sr);
+  md_.fstat_.st_mtim.tv_sec = times->modtime;
+  md_.fstat_.st_atim.tv_sec = times->actime;
+  // store
+  mutex_->lock();
+  bool status = store_->put(key.pack(), md_.pack());
+  mutex_->unlock();
+
+  return status;
 }
 int KVFS::Truncate(const char *filename, off_t length) {
+  
   return 0;
 }
 int KVFS::Mknod(const char *filename, mode_t mode, dev_t dev) {
-  return 0;
+  std::filesystem::path orig_ = std::filesystem::path(filename);
+  if (orig_.is_relative()) {
+    // make it absolute
+    std::filesystem::path prv_ = pwd_;
+    orig_ = pwd_.append(orig_.string());
+    pwd_ = prv_;
+  }
+  if (orig_.is_absolute()) {
+    // must start with single "/"
+    if (orig_.root_path() != "/") {
+      throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
+    }
+  }
+
+  // Attemp to resolve the real path from given path
+  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
+  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, std::filesystem::hash_value(resolved.first.filename())};
+  const string &key_str = key.pack();
+  // lock
+  mutex_->lock();
+  if (store_->hasKey(key_str)) {
+    // exists return error
+    errorno_ = -EEXIST;
+    mutex_->unlock();
+  }
+  kvfsMetaData md_ = kvfsMetaData(resolved.first.filename(),
+                                  GetFreeInode(),
+                                  mode | resolved.second.second.fstat_.st_mode,
+                                  resolved.second.first);
+  md_.fstat_.st_dev = dev;
+  md_.fstat_.st_gid = mode;
+  md_.fstat_.st_uid = mode;
+  // update ctime
+  md_.fstat_.st_ctim.tv_sec = time_now;
+  // store
+  mutex_->lock();
+  bool status = store_->put(key_str, md_.pack());
+  mutex_->unlock();
+
+  return status;
 }
 void KVFS::TuneFS() {
   store_->compact();
@@ -1215,6 +1592,27 @@ std::pair<ssize_t, void *> KVFS::ReadBlock(kvfsBlockValue *blck_, void *buffer, 
   } else {
     idx = blck_->read_at(buffer, max_readable_size, offset);
     return std::pair<ssize_t, void *>(max_readable_size, idx);
+  }
+}
+std::pair<std::filesystem::path,
+          std::pair<kvfs::kvfsDirKey, kvfs::kvfsMetaData>> KVFS::RealPath(const std::filesystem::path &input) {
+  int symlink_loops = 0;
+  std::filesystem::path real_path = input;
+  for (;;) {
+    auto pair = ResolvePath(real_path);
+    auto second_pair = ResolvePath(pair.first);
+    if (second_pair.first == pair.first) {
+      // it is the real path
+      return pair;
+    } else {
+      ++symlink_loops;
+      if (symlink_loops > KVFS_LINK_MAX) {
+        errorno_ = -ELOOP;
+        throw FSError(FSErrorType::FS_ELOOP, "A loop exists in symbolic links encountered during resolution of "
+                                             "the path");
+      }
+      real_path = second_pair.first;
+    }
   }
 }
 
