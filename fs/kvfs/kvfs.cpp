@@ -1424,7 +1424,7 @@ int KVFS::UTime(const char *filename, const struct utimbuf *times) {
   return status;
 }
 int KVFS::Truncate(const char *filename, off_t length) {
-  
+
   return 0;
 }
 int KVFS::Mknod(const char *filename, mode_t mode, dev_t dev) {
