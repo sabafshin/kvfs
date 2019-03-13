@@ -8,7 +8,7 @@ $ git clone --recurse-submodules https://github.com/ATALOO/kvfs.git
 
 #### How to build
 ```text
-$ mkdir build | cd build$ 
+$ mkdir build | cd build
 $ cmake ../
 $ make -j 4
 ```
