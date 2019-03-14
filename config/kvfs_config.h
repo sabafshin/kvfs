@@ -10,17 +10,17 @@
 #pragma once
 
 #if !defined(KVFS_VERSION)
-#define KVFS_VERSION "0.1"
+#define KVFS_VERSION "1.0"
 #endif  // !defined(KVFS_VERSION)
 #if !defined(KVFS_HAVE_ROCKSDB)
-#define KVFS_HAVE_ROCKSDB 0
+#define KVFS_HAVE_ROCKSDB 1
 #endif  // !defined(KVFS_HAVE_ROCKSDB)
 #if !defined(KVFS_HAVE_LEVELDB)
-#define KVFS_HAVE_LEVELDB 1
+#define KVFS_HAVE_LEVELDB 0
 #endif  // !defined(KVFS_HAVE_LEVELDB)
 
 #if !defined(KVFS_DEF_BLOCK_SIZE)
-#define KVFS_DEF_BLOCK_SIZE 4096
+#define KVFS_DEF_BLOCK_SIZE 1024
 #endif  // !defined(KVFS_DEF_BLOCK_SIZE)
 
 #if !defined(KVFS_MAX_OPEN_FILES)

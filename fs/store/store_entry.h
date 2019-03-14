@@ -137,7 +137,7 @@ struct kvfsBlockValue {
       throw std::invalid_argument("Bad size");
     }
     auto *idx = bytes.data();
-    memmove(this, idx, sizeof(kvfsBlockValue));
+    memcpy(this, idx, sizeof(kvfsBlockValue));
   }
 };
 
@@ -186,7 +186,7 @@ struct kvfsMetaData {
       throw std::invalid_argument("Bad size");
     }
     auto *idx = bytes.data();
-    memmove(this, idx, sizeof(kvfsMetaData));
+    memcpy(this, idx, sizeof(kvfsMetaData));
   }
 
   std::string pack() const {

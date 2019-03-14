@@ -30,7 +30,7 @@ void write_read_test() {
 
   int fd_ = open(file_name.c_str(), flags, mode);
 
-  int TOTAL_DATA = 100000;
+  int TOTAL_DATA = 1000000;
 
   const void *buffer_w = data;
 

@@ -17,8 +17,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/CMake/")
 include(CompilerSettingsUnix)
 include(kvfsConfigChecks)
 
-option(BuildWithRocksDB "BuildWithRocksDB" OFF)
-option(BuildWithLevelDB "BuildWithLevelDB" ON)
+option(BuildWithRocksDB "BuildWithRocksDB" ON)
+option(BuildWithLevelDB "BuildWithLevelDB" OFF)
 
 if (BuildWithRocksDB)
   ########## RocksDB Config #########################################
@@ -61,10 +61,10 @@ if (BuildWithLevelDB)
   message("-- Building with LevelDB as backing key-value store")
 endif ()
 
-set(PACKAGE_VERSION "0.1")
+set(PACKAGE_VERSION "1.0")
 set(MAX_OPEN_FILES "512")
 set(CACHE_SIZE "512")
-set(BLOCK_SIZE "4096")
+set(BLOCK_SIZE "1024")
 option(KvfsThreadSafe "Kvfs thread safety mechanism with mutex locks" OFF)
 configure_file(
     ${PROJECT_SOURCE_DIR}/CMake/kvfs_config.h.in

@@ -1915,12 +1915,14 @@ std::pair<ssize_t, kvfs::kvfsBlockKey> KVFS::WriteBlocks(kvfsBlockKey blck_key_,
     std::cout << blck_key_.block_number_ << " " << std::string((char *)bv_->data) << std::endl;
 #endif
     batch->put(blck_key_.pack(), bv_->pack());
+//    store_->put(blck_key_.pack(), bv_->pack());
     buffer_size_ -= pair.first;
     written += pair.first;
     // update offset
     idx = pair.second;
     blck_key_ = bv_->next_block_;
-    delete (bv_);
+    free(bv_);
+//    delete(bv_);
   }
   // flush the write batch
   batch->flush();
