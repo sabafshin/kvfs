@@ -10,8 +10,24 @@
 #ifndef KVFS_KVFS_LEVELDB_EXCEPTION_H
 #define KVFS_KVFS_LEVELDB_EXCEPTION_H
 
-class kvfs_leveldb_exception {
+#include <exception>
+#include <leveldb/status.h>
 
+namespace kvfs {
+
+class LevelDBException : public std::exception {
+ public:
+  LevelDBException(const leveldb::Status &status, const std::string &msg);
+  LevelDBException(bool status, const std::string &msg);
+
+  const char *what() const noexcept override;
+
+ private:
+  leveldb::Status status_;
+  std::string msg_;
+  std::string fullMsg_;
 };
+
+}  // namespace kvfs
 
 #endif //KVFS_KVFS_LEVELDB_EXCEPTION_H

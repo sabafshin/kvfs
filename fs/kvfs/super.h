@@ -17,17 +17,17 @@
 namespace kvfs {
 
 struct kvfsSuperBlock {
-  uint64_t next_free_inode_;
-  uint64_t total_inode_count_;
-  uint64_t total_block_count_;
-  uint fs_number_of_mounts_;
-  time_t fs_last_mount_time_;
-  time_t fs_creation_time_;
-  time_t fs_last_access_time_;
-  time_t fs_last_modification_time_;
+  uint64_t next_free_inode_{};
+  uint64_t total_inode_count_{};
+  uint64_t total_block_count_{};
+  uint fs_number_of_mounts_{};
+  time_t fs_last_mount_time_{};
+  time_t fs_creation_time_{};
+  time_t fs_last_access_time_{};
+  time_t fs_last_modification_time_{};
   kvfsDirKey store_end_key;
-  size_t freeblocks_count_;
-  uint64_t next_free_block_number;
+  size_t freeblocks_count_{};
+  uint64_t next_free_block_number{};
 
   void parse(const StoreResult &sr) {
     auto bytes_ = sr.asString();

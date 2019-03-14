@@ -162,7 +162,6 @@ class RocksDBWriteBatch : public Store::WriteBatch {
   size_t buf_size;
 };
 
-
 void RocksDBWriteBatch::flush() {
   auto pending = write_batch.Count();
   if (pending == 0) {

@@ -5,7 +5,7 @@
 # CMakeList.txt : Top-level CMake project file, do global configuration
 # and include sub-projects here.
 #
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.12)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -17,15 +17,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/CMake/")
 include(CompilerSettingsUnix)
 include(kvfsConfigChecks)
 
-set(PACKAGE_VERSION "0.1")
-
-configure_file(
-    ${PROJECT_SOURCE_DIR}/CMake/kvfs-config.h.in
-    config/kvfs_config.h
-)
-
-option(BuildWithRocksDB "BuildWithRocksDB" ON)
-option(BuildWithLevelDB "BuildWithLevelDB" OFF)
+option(BuildWithRocksDB "BuildWithRocksDB" OFF)
+option(BuildWithLevelDB "BuildWithLevelDB" ON)
 
 if (BuildWithRocksDB)
   ########## RocksDB Config #########################################
@@ -46,7 +39,37 @@ if (BuildWithRocksDB)
   include_directories(${ROCKSDB_SOURCE_DIR})
   include_directories(${ROCKSDB_SOURCE_DIR}/include)
   ########## RocksDB Config #########################################
+
+  set(KVFS_HAVE_ROCKSDB "1")
+  message("-- Building with RocksDB as backing key-value store")
 endif ()
+
+if (BuildWithLevelDB)
+  add_compile_options("-fPIC")
+  ########## Leveldb configs ################################
+  option(LEVELDB_BUILD_TESTS "Build LevelDB's unit tests" OFF)
+  option(LEVELDB_BUILD_BENCHMARKS "Build LevelDB's benchmarks" OFF)
+  option(LEVELDB_INSTALL "Install LevelDB's header and library" OFF)
+  option(BUILD_WITH_SHARED_LIBS ON)
+  set(LEVELDB_LIB leveldb)
+  set(LEVELDB_SOURCE_DIR ${PROJECT_SOURCE_DIR}/third_party/leveldb)
+  add_subdirectory(${LEVELDB_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/third_party/leveldb)
+  include_directories(${LEVELDB_SOURCE_DIR}/include/)
+  ###########################################################
+
+  set(KVFS_HAVE_LEVELDB "1")
+  message("-- Building with LevelDB as backing key-value store")
+endif ()
+
+set(PACKAGE_VERSION "0.1")
+set(MAX_OPEN_FILES "512")
+set(CACHE_SIZE "512")
+set(BLOCK_SIZE "4096")
+option(KvfsThreadSafe "Kvfs thread safety mechanism with mutex locks" OFF)
+configure_file(
+    ${PROJECT_SOURCE_DIR}/CMake/kvfs_config.h.in
+    ${PROJECT_SOURCE_DIR}/config/kvfs_config.h
+)
 
 include_directories(${PROJECT_SOURCE_DIR}/config)
 include_directories(${PROJECT_SOURCE_DIR}/fs)
@@ -67,7 +90,8 @@ set(
     include/kvfs/fs.h
     fs/kvfs/fs_error.h
     fs/kvfs/super.h
-    fs/kvfs/kvfs_dirent.h)
+    fs/kvfs/kvfs_dirent.h
+    config/kvfs_config.h)
 
 source_group("Header Files" FILES ${KVFS_HEADERS})
 
@@ -77,12 +101,25 @@ add_library(
     ${KVFS_HEADERS}
 )
 
-target_link_libraries(
-    ${PROJECT_NAME}
-    PRIVATE
-    kvfs_utils
-    kvfs_rocksdb
-    kvfs_store
-    kvfs_inodes
-    stdc++fs
-)
+if (BuildWithRocksDB)
+  target_link_libraries(
+      ${PROJECT_NAME}
+      PRIVATE
+      kvfs_utils
+      kvfs_rocksdb
+      kvfs_store
+      kvfs_inodes
+      stdc++fs
+  )
+endif ()
+if (BuildWithLevelDB)
+  target_link_libraries(
+      ${PROJECT_NAME}
+      PRIVATE
+      kvfs_utils
+      kvfs_leveldb
+      kvfs_store
+      kvfs_inodes
+      stdc++fs
+  )
+endif ()

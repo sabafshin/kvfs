@@ -6,9 +6,12 @@ set(CMAKE_CXX_STANDARD 17)
 
 if (BuildWithRocksDB)
   add_subdirectory(kvfs_rocksdb)
-else ()
+endif ()
+
+if (BuildWithLevelDB)
   add_subdirectory(kvfs_leveldb)
 endif ()
+
 add_subdirectory(store)
 add_subdirectory(inodes)
 add_subdirectory(kvfs_utils)

@@ -55,7 +55,7 @@ int main() {
 
   //////////////////////////////////////////////
 
-  int TOTAL_DATA = 10000;
+  int TOTAL_DATA = 100000;
 
   const void *buffer_w = data;
 

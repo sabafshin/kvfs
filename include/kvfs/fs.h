@@ -14,7 +14,7 @@
 #include <memory>
 #include <dirent.h>
 #include <sys/types.h>
-
+#include <kvfs_config.h>
 #include <kvfs/kvfs_dirent.h>
 
 /**

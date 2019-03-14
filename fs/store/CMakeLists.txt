@@ -27,8 +27,3 @@ add_library(
     ${PROJECT_NAME} SHARED
     ${STORE_SRCS}
     ${STORE_HEADERS})
-
-#target_link_libraries(
-#    ${PROJECT_NAME}
-#    PRIVATE
-#)

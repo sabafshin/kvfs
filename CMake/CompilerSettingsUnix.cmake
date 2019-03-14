@@ -1,4 +1,5 @@
-set ( CMAKE_CXX_FLAGS_COMMON "-g -Wall -Wextra" )
+# -Wall -Wextra
+set(CMAKE_CXX_FLAGS_COMMON "-g")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_COMMON}")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_COMMON} -O3")
 
@@ -7,7 +8,7 @@ add_compile_options("-lstdc++fs")
 add_link_options("-lstdc++fs")
 
 function(apply_compile_options_to_target THETARGET)
-    target_compile_options ( ${THETARGET}
-                             PUBLIC
-        -D_FILE_OFFSET_BITS=64)
-endfunction ()
+  target_compile_options(${THETARGET}
+      PUBLIC
+      -D_FILE_OFFSET_BITS=64)
+endfunction()

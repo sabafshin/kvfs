@@ -26,10 +26,8 @@ add_library(
     ${INODES_SRCS}
     ${INODES_HEADERS}
 )
-
 target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
-    kvfs_rocksdb
     kvfs_utils
 )

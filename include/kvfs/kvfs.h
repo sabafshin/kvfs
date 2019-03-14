@@ -10,7 +10,14 @@
 #ifndef KVFS_FILESYSTEM_H
 #define KVFS_FILESYSTEM_H
 
+#include "fs.h"
+
+#if KVFS_HAVE_ROCKSDB
 #include <kvfs_rocksdb/kvfs_rocksdb_store.h>
+#endif
+#if KVFS_HAVE_LEVELDB
+#include <kvfs_leveldb/kvfs_leveldb_store.h>
+#endif
 #include <inodes/directory_entry_cache.h>
 #include <inodes/inode_cache.h>
 #include <kvfs/super.h>
@@ -18,7 +25,6 @@
 #include <time.h>
 #include <fcntl.h>
 #include <kvfs/fs_error.h>
-#include "fs.h"
 #include <filesystem>
 #include <limits>
 #include <stdlib.h>
@@ -91,7 +97,9 @@ class KVFS : public FS {
   kvfsMetaData current_md_{};
   kvfsDirKey current_key_{};
   uint32_t next_free_fd_{};
+#if KVFS_THREAD_SAFE
   std::unique_ptr<std::mutex> mutex_;
+#endif
   // Private Methods
  private:
   void FSInit();

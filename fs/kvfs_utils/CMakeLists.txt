@@ -24,12 +24,3 @@ add_library(
     ${UTILS_SRCS}
     ${UTILS_HEADERS}
 )
-
-#[[
-target_link_libraries(
-    ${PROJECT_NAME}
-    PRIVATE
-    kvfs_store
-    kvfs_rocksdb
-    kvfs_inodes
-)]]
