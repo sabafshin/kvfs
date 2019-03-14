@@ -36,7 +36,7 @@ kvfs::KVFS::KVFS(const std::string &mount_path)
 kvfs::KVFS::KVFS()
     : root_path("/tmp/db/"),
 #if KVFS_HAVE_ROCKSDB
-    store_(std::make_shared<RocksDBStore>(root_path),
+    store_(std::make_shared<RocksDBStore>(root_path)),
 #endif
 #if KVFS_HAVE_LEVELDB
       store_(std::make_shared<kvfsLevelDBStore>(root_path)),
