@@ -39,8 +39,6 @@ class Store {
 
   virtual void close() = 0;
 
-  virtual bool hasKey(const std::string &key) const = 0;
-
   virtual bool destroy() = 0;
   class WriteBatch {
    public:
@@ -65,7 +63,7 @@ class Store {
     friend class Store;
   };
 
-  virtual std::unique_ptr<WriteBatch> get_write_batch(size_t buffer_size = 0) = 0;
+  virtual std::unique_ptr<WriteBatch> get_write_batch() = 0;
 
   class Iterator {
    public:

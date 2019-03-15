@@ -12,6 +12,10 @@
 kvfs::LevelDBHandles::LevelDBHandles(std::string dbPath) {
   leveldb::Options options;
   options.create_if_missing = true;
+  options.block_size = 4096;
+  options.paranoid_checks = false;
+  options.compression = leveldb::CompressionType::kNoCompression;
+  options.reuse_logs = true;
 
   leveldb::DB *db_raw;
   auto status = leveldb::DB::Open(options, dbPath, &db_raw);

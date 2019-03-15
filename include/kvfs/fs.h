@@ -728,6 +728,8 @@ ESPIPE
   virtual ssize_t PWrite(int filedes, const void *buffer, size_t size, off_t offset) = 0;
 
   virtual void DestroyFS() = 0;
+
+  virtual int UnMount() = 0;
 };
 
 #endif //FILESYSTEM_H

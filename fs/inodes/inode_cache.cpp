@@ -31,9 +31,6 @@ bool InodeCache::get(const kvfsDirKey &key, InodeAccessMode mode, InodeCacheEntr
 
   auto it = cache_map_lookup_.find(key);
   if (it == cache_map_lookup_.end()) {
-    if (!store_->hasKey(key.pack())) {
-      return false;
-    }
     StoreResult sr = store_->get(key.pack());
     if (sr.isValid()) {
       kvfsMetaData md_;

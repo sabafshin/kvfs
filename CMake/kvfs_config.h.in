@@ -36,5 +36,5 @@
 #endif  // !defined(KVFS_LINK_MAX)
 
 #if !defined(KVFS_THREAD_SAFE)
-#cmakedefine01 KVFS_THREAD_SAFE ${kvfsThreadSafe}
+#cmakedefine01 KVFS_THREAD_SAFE
 #endif  // !defined(KVFS_THREAD_SAFE)

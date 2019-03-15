@@ -36,6 +36,7 @@
 #include <cstring>
 #include <linux/fs.h>
 #include <unistd.h>
+#include <chrono>
 
 namespace kvfs {
 
@@ -85,10 +86,12 @@ class KVFS : public FS {
   ssize_t PRead(int filedes, void *buffer, size_t size, off_t offset) override;
   ssize_t PWrite(int filedes, const void *buffer, size_t size, off_t offset) override;
   void DestroyFS() override;
+  int UnMount() override;
+
  private:
   std::filesystem::path root_path;
   std::shared_ptr<Store> store_;
-  std::unique_ptr<InodeCache> inode_cache_;
+//  std::unique_ptr<InodeCache> inode_cache_;
   std::unique_ptr<DentryCache> open_fds_;
   kvfsSuperBlock super_block_{};
   int8_t errorno_;

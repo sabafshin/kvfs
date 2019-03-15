@@ -20,7 +20,7 @@
 #endif  // !defined(KVFS_HAVE_LEVELDB)
 
 #if !defined(KVFS_DEF_BLOCK_SIZE)
-#define KVFS_DEF_BLOCK_SIZE 1024
+#define KVFS_DEF_BLOCK_SIZE 4096
 #endif  // !defined(KVFS_DEF_BLOCK_SIZE)
 
 #if !defined(KVFS_MAX_OPEN_FILES)
@@ -36,5 +36,5 @@
 #endif  // !defined(KVFS_LINK_MAX)
 
 #if !defined(KVFS_THREAD_SAFE)
-#define KVFS_THREAD_SAFE  0
+#define KVFS_THREAD_SAFE 0
 #endif  // !defined(KVFS_THREAD_SAFE)

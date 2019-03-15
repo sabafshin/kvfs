@@ -46,7 +46,6 @@ StoreResult RocksDBStore::get(const std::string &key) {
       // Return an empty StoreResult
       return StoreResult();
     }
-
     throw RocksException(
         status, "failed to get " + key + " from local store");
   }
@@ -97,13 +96,6 @@ StoreResult RocksDBStore::get_parent(const std::string &key) {
   return StoreResult();
 }
 
-bool RocksDBStore::hasKey(const std::string &key) const {
-  string value;
-  auto status = db_handle->db->KeyMayExist(
-      ReadOptions(), key, &value);
-  return status;
-}
-
 bool RocksDBStore::sync() {
   rocksdb::Status status = db_handle->db->SyncWAL();
   return status.ok();
@@ -118,7 +110,7 @@ bool RocksDBStore::compact() {
 bool RocksDBStore::merge(const std::string &key, const std::string &value) {
 //  auto txn = db_handle->db->BeginTransaction(WriteOptions());
 //  txn->Merge(key, value);
-  if (this->hasKey(key)) {
+  if (this->get(key).isValid()) {
 //    auto status = db_handle->db->Merge(rocksdb::WriteOptions(), key, value);
 //    return status.ok();
 //  } else{
@@ -135,13 +127,8 @@ bool RocksDBStore::delete_range(const std::string &start, const std::string &end
 
 //  txn->SetSavePoint();
   auto status = db_handle->db->DeleteRange(WriteOptions(), db_handle->db->DefaultColumnFamily(), start, end);
-  if (!status.ok()) {
-//    txn->RollbackToSavePoint();
-    return false;
-  }
+  return status.ok();
 //  txn->PopSavePoint();
-
-  return true;
 }
 
 namespace {
@@ -153,13 +140,10 @@ class RocksDBWriteBatch : public Store::WriteBatch {
 
   void flush() override;
 
-  RocksDBWriteBatch(std::shared_ptr<RocksHandles> db_handle, size_t buffer_size);
-
-  void flush_if_needed();
+  explicit RocksDBWriteBatch(std::shared_ptr<RocksHandles> db_handle);
 
   std::shared_ptr<RocksHandles> db_handle_;
   rocksdb::WriteBatch write_batch;
-  size_t buf_size;
 };
 
 void RocksDBWriteBatch::flush() {
@@ -178,26 +162,16 @@ void RocksDBWriteBatch::flush() {
   write_batch.Clear();
 }
 
-void RocksDBWriteBatch::flush_if_needed() {
-  auto needFlush = buf_size > 0 && write_batch.GetDataSize() >= buf_size;
 
-  if (needFlush) {
-    flush();
-  }
-}
-
-RocksDBWriteBatch::RocksDBWriteBatch(const std::shared_ptr<kvfs::RocksHandles> db_handle, size_t buffer_size)
-    : Store::WriteBatch(), db_handle_(db_handle), write_batch(buffer_size), buf_size(buffer_size) {}
+RocksDBWriteBatch::RocksDBWriteBatch(const std::shared_ptr<kvfs::RocksHandles> db_handle)
+    : Store::WriteBatch(), db_handle_(db_handle), write_batch(){}
 
 void RocksDBWriteBatch::put(const std::string &key, const std::string &value) {
   write_batch.Put(key, value);
-
-  flush_if_needed();
 }
 
 void RocksDBWriteBatch::delete_(const std::string &key) {
   write_batch.Delete(key);
-  flush_if_needed();
 }
 
 class RocksDBIterator : public Store::Iterator {
@@ -264,8 +238,8 @@ kvfs::RocksDBIterator::~RocksDBIterator() {
 
 }//namespace
 
-std::unique_ptr<Store::WriteBatch> RocksDBStore::get_write_batch(size_t buf_size) {
-  return std::make_unique<RocksDBWriteBatch>(db_handle, buf_size);
+std::unique_ptr<Store::WriteBatch> RocksDBStore::get_write_batch() {
+  return std::make_unique<RocksDBWriteBatch>(db_handle);
 }
 std::unique_ptr<Store::Iterator> RocksDBStore::get_iterator() {
   return std::make_unique<RocksDBIterator>(db_handle);

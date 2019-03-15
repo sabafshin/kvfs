@@ -25,7 +25,7 @@ if (BuildWithRocksDB)
   #### Disable RocksDB test build ##########
   option(WITH_GFLAGS "build with GFlags" OFF)
   option(WITH_MD_LIBRARY "build with MD" OFF)
-  option(WITH_FALLOCATE "build with fallocate" OFF)
+  option(WITH_FALLOCATE "build with fallocate" ON)
   option(WITH_TESTS "build with tests" OFF)
   option(WITH_TOOLS "build with tools" OFF)
   ##########################################
@@ -47,7 +47,7 @@ endif ()
 if (BuildWithLevelDB)
   add_compile_options("-fPIC")
   ########## Leveldb configs ################################
-  option(LEVELDB_BUILD_TESTS "Build LevelDB's unit tests" OFF)
+  option(LEVELDB_BUILD_TESTS "Build LevelDB's unit tests" ON)
   option(LEVELDB_BUILD_BENCHMARKS "Build LevelDB's benchmarks" OFF)
   option(LEVELDB_INSTALL "Install LevelDB's header and library" OFF)
   option(BUILD_WITH_SHARED_LIBS ON)
@@ -64,8 +64,8 @@ endif ()
 set(PACKAGE_VERSION "1.0")
 set(MAX_OPEN_FILES "512")
 set(CACHE_SIZE "512")
-set(BLOCK_SIZE "1024")
-option(KvfsThreadSafe "Kvfs thread safety mechanism with mutex locks" OFF)
+set(BLOCK_SIZE "4096")
+#set(KVFS_THREAD_SAFE "1")
 configure_file(
     ${PROJECT_SOURCE_DIR}/CMake/kvfs_config.h.in
     ${PROJECT_SOURCE_DIR}/config/kvfs_config.h

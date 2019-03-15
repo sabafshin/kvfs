@@ -25,10 +25,8 @@ int main() {
 //  std::string file_name = "../..////./Hi.txt";
   std::string file_name = "Hi.txt";
 
-  auto data = "123456789abcdefghijklmnop"; // 25 bytes
-  size_t data_size = strlen(data);
-
-  auto start = std::chrono::high_resolution_clock::now();
+  std::string data(100 * 1024 * 1024 , 'x'); // 25 bytes
+  size_t data_size = 100 * 1024 * 1024;
 
   int fd_ = fs_->Open(file_name.c_str(), flags, mode);
 //  std::cout << fd_ << std::endl;
@@ -55,23 +53,27 @@ int main() {
 
   //////////////////////////////////////////////
 
-  int TOTAL_DATA = 100000;
+  int TOTAL_DATA = 100;
 
-  const void *buffer_w = data;
+  const void *buffer_w = data.c_str();
 
-  int total_data_size = 0;
+  auto start = std::chrono::high_resolution_clock::now();
 
-  for (int i = 0; i < TOTAL_DATA; i++) {
+  ssize_t total_data_size = fs_->Write(fd_, buffer_w, data_size);
+
+  /*for (int i = 0; i < TOTAL_DATA; i++) {
 
     ssize_t size = fs_->Write(fd_, buffer_w, data_size);
 
     total_data_size += size;
 
-  }
+  }*/
+  auto finish = std::chrono::high_resolution_clock::now();
   std::cout << "Wrote to kvfs: " << total_data_size << std::endl;
   total_data_size = 0;
+  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms\n";
 
-  for (int i = 0; i < TOTAL_DATA; ++i) {
+  /*for (int i = 0; i < TOTAL_DATA; ++i) {
 
     void *buffer_r = std::malloc(data_size);
 
@@ -79,16 +81,22 @@ int main() {
     free(buffer_r);
 
     total_data_size += cur_read;
-  }
+  }*/
+  void * buffer_r = std::malloc(data_size);
+  std::cout << fs_->LSeek(fd_, 0, SEEK_SET) << std::endl;
+  start = std::chrono::high_resolution_clock::now();
+  total_data_size = fs_->Read(fd_, buffer_r ,data_size);
+  finish = std::chrono::high_resolution_clock::now();
   std::cout << "Read from kvfs: " << total_data_size << std::endl;
-
+  free(buffer_r);
   fs_->Close(fd_);
-
-  auto finish = std::chrono::high_resolution_clock::now();
 
   std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms\n";
 
-  fs_->DestroyFS();
+//  fs_->DestroyFS();
+//  fs_->Remove(file_name.c_str());
+  fs_->UnMount();
+  fs_->Sync();
   fs_.reset();
   return 0;
 }

@@ -27,7 +27,21 @@ RocksHandles::RocksHandles(string dbPath) {
   Options options;
   // Optimize RocksDB. This is the easiest way to get RocksDB to perform well.
   options.IncreaseParallelism();
-//  options.OptimizeLevelStyleCompaction();
+  options.enable_pipelined_write = true;
+  options.paranoid_checks = false;
+  options.compression = rocksdb::CompressionType::kNoCompression;
+  options.enable_write_thread_adaptive_yield = true;
+  options.allow_concurrent_memtable_write = true;
+  options.allow_ingest_behind = true;
+  options.allow_mmap_reads = true;
+  options.allow_mmap_writes = true;
+  options.allow_2pc = true;
+  options.allow_fallocate = true;
+  options.optimize_filters_for_hits = true;
+  options.paranoid_file_checks = false;
+  options.arena_block_size = 4096;
+  options.use_adaptive_mutex = true;
+  options.enable_thread_tracking = true;
 
   // Enable prefix bloom for mem tables
 //  options.prefix_extractor.reset(rocksdb::NewFixedPrefixTransform(3));
@@ -41,7 +55,6 @@ RocksHandles::RocksHandles(string dbPath) {
 
   // Create the DB if it's not already present.
   options.create_if_missing = true;
-  options.enable_pipelined_write = true;
 
   rocksdb::DB *dbRaw;
 

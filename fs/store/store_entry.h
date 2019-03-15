@@ -92,7 +92,7 @@ struct kvfsBlockValue {
   // write append upto buffer_size, buffer_size is <= KVFS_BLOCK_SIZE
   const void *write(const void *buffer, size_t buffer_size) {
     if (size_ != KVFS_DEF_BLOCK_SIZE) {
-      std::memcpy(&data[size_], buffer, buffer_size);
+      memcpy(&data[size_], buffer, buffer_size);
       // update size
       size_ += buffer_size;
       // return idx in buffer after write
@@ -106,21 +106,21 @@ struct kvfsBlockValue {
   const void *write_at(const void *buffer, size_t buffer_size, kvfs_off_t offset) {
     // offset is between 0 and KVFS_BLOCK_SIZE
     size_ = offset + buffer_size;
-    std::memcpy(&data[offset], buffer, buffer_size);
+    memcpy(&data[offset], buffer, buffer_size);
     auto output = static_cast<const byte *>(buffer) + buffer_size;
     return output;
   }
 
   // read into buffer upto size
   void *read(void *buffer, size_t size) const {
-    std::memcpy(buffer, data, size);
+    memcpy(buffer, data, size);
     void *idx = static_cast<byte *>(buffer) + size;
     return idx;
   }
 
   // read from given offset upto size
   void *read_at(void *buffer, size_t size, kvfs_off_t offset) const {
-    std::memcpy(buffer, &data[offset], size);
+    memcpy(buffer, &data[offset], size);
     void *idx = static_cast<byte *>(buffer) + size;
     return idx;
   }
