@@ -17,8 +17,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/CMake/")
 include(CompilerSettingsUnix)
 include(kvfsConfigChecks)
 
-option(BuildWithRocksDB "BuildWithRocksDB" ON)
-option(BuildWithLevelDB "BuildWithLevelDB" OFF)
+option(BuildWithRocksDB "BuildWithRocksDB" OFF)
+option(BuildWithLevelDB "BuildWithLevelDB" ON)
 
 if (BuildWithRocksDB)
   ########## RocksDB Config #########################################

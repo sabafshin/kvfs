@@ -54,12 +54,6 @@ std::vector<kvfs::StoreResult> kvfs::kvfsLevelDBStore::get_children(const std::s
 kvfs::StoreResult kvfs::kvfsLevelDBStore::get_parent(const std::string &key) {
   return kvfs::StoreResult();
 }
-bool kvfs::kvfsLevelDBStore::hasKey(const std::string &key) const {
-  std::string value;
-  auto status = db_handle->db->Get(
-      leveldb::ReadOptions(), key, &value);
-  return status.ok();
-}
 bool kvfs::kvfsLevelDBStore::sync() {
   leveldb::WriteOptions options;
   options.sync = true;
@@ -83,13 +77,10 @@ class LevelDBWriteBatch : public kvfs::Store::WriteBatch {
 
   void flush() override;
 
-  LevelDBWriteBatch(std::shared_ptr<kvfs::LevelDBHandles> db_handle, size_t buffer_size);
-
-  void flush_if_needed();
+  LevelDBWriteBatch(std::shared_ptr<kvfs::LevelDBHandles> db_handle);
 
   std::shared_ptr<kvfs::LevelDBHandles> db_handle_;
   leveldb::WriteBatch write_batch;
-  size_t buf_size;
 };
 
 void LevelDBWriteBatch::flush() {
@@ -108,26 +99,16 @@ void LevelDBWriteBatch::flush() {
   write_batch.Clear();
 }
 
-void LevelDBWriteBatch::flush_if_needed() {
-  auto needFlush = buf_size > 0 && write_batch.ApproximateSize() >= buf_size;
-
-  if (needFlush) {
-    flush();
-  }
-}
-
-LevelDBWriteBatch::LevelDBWriteBatch(const std::shared_ptr<kvfs::LevelDBHandles> db_handle, size_t buffer_size)
-    : kvfs::Store::WriteBatch(), db_handle_(db_handle), write_batch(), buf_size(buffer_size) {}
+LevelDBWriteBatch::LevelDBWriteBatch(const std::shared_ptr<kvfs::LevelDBHandles> db_handle)
+    : kvfs::Store::WriteBatch(), db_handle_(db_handle), write_batch() {}
 
 void LevelDBWriteBatch::put(const std::string &key, const std::string &value) {
   write_batch.Put(key, value);
 
-  flush_if_needed();
 }
 
 void LevelDBWriteBatch::delete_(const std::string &key) {
   write_batch.Delete(key);
-  flush_if_needed();
 }
 
 class LevelDBIterator : public kvfs::Store::Iterator {
@@ -193,8 +174,8 @@ bool LevelDBIterator::Refresh() {
 
 }//namespace
 
-std::unique_ptr<kvfs::Store::WriteBatch> kvfs::kvfsLevelDBStore::get_write_batch(size_t buf_size) {
-  return std::make_unique<LevelDBWriteBatch>(db_handle, buf_size);
+std::unique_ptr<kvfs::Store::WriteBatch> kvfs::kvfsLevelDBStore::get_write_batch() {
+  return std::make_unique<LevelDBWriteBatch>(db_handle);
 }
 std::unique_ptr<kvfs::Store::Iterator> kvfs::kvfsLevelDBStore::get_iterator() {
   return std::make_unique<LevelDBIterator>(db_handle);

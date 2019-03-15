@@ -38,15 +38,13 @@ class kvfsLevelDBStore : public Store {
   std::vector<StoreResult> get_children(const std::string &key) override;
   StoreResult get_parent(const std::string &key) override;
 
-  bool hasKey(const std::string &key) const override;
-
   bool sync() override;
 
   bool compact() override;
 
   bool destroy() override;
 
-  std::unique_ptr<WriteBatch> get_write_batch(size_t buf_size = 0) override;
+  std::unique_ptr<WriteBatch> get_write_batch() override;
 
   std::unique_ptr<Iterator> get_iterator() override;
 
