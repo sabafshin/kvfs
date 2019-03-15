@@ -27,4 +27,3 @@ kvfs::LevelDBHandles::LevelDBHandles(std::string dbPath) {
 kvfs::LevelDBHandles::~LevelDBHandles() {
   db.reset();
 }
-
