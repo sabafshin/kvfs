@@ -15,4 +15,7 @@ endif ()
 add_subdirectory(store)
 add_subdirectory(inodes)
 add_subdirectory(kvfs_utils)
-add_subdirectory(my_tests)
+
+if (BuildWithTests)
+  add_subdirectory(my_tests)
+endif ()

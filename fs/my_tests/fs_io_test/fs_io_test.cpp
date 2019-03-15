@@ -19,15 +19,14 @@ using random_bytes_engine = std::independent_bits_engine<
 int main() {
   std::unique_ptr<FS> fs_ = std::make_unique<kvfs::KVFS>();
   int flags = O_CREAT;
-  flags |= O_RDWR | O_APPEND;
+  flags |= O_RDWR | O_APPEND | S_IFREG;
   std::cout << "File opened with flags: " << flags << std::endl;
   mode_t mode = geteuid();
 //  std::string file_name = "../..////./Hi.txt";
   std::string file_name = "Hi.txt";
 
-  std::string data(100 * 1024 * 1024 , 'x'); // 25 bytes
+  std::string data(100 * 1024 * 1024, 'x'); // 25 bytes
   size_t data_size = 100 * 1024 * 1024;
-
   int fd_ = fs_->Open(file_name.c_str(), flags, mode);
 //  std::cout << fd_ << std::endl;
 //  std::cout << data_size << std::endl;
@@ -82,10 +81,10 @@ int main() {
 
     total_data_size += cur_read;
   }*/
-  void * buffer_r = std::malloc(data_size);
+  void *buffer_r = std::malloc(data_size);
   std::cout << fs_->LSeek(fd_, 0, SEEK_SET) << std::endl;
   start = std::chrono::high_resolution_clock::now();
-  total_data_size = fs_->Read(fd_, buffer_r ,data_size);
+  total_data_size = fs_->Read(fd_, buffer_r, data_size);
   finish = std::chrono::high_resolution_clock::now();
   std::cout << "Read from kvfs: " << total_data_size << std::endl;
   free(buffer_r);
@@ -93,10 +92,17 @@ int main() {
 
   std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms\n";
 
-//  fs_->DestroyFS();
-//  fs_->Remove(file_name.c_str());
-  fs_->UnMount();
   fs_->Sync();
+  fs_->Remove(file_name.c_str());
+
+  auto dirstream = fs_->OpenDir("/");
+  kvfs_dirent *dirent1 = fs_->ReadDir(dirstream);
+  while (dirent1) {
+    std::cout << dirent1->d_name << std::endl;
+    dirent1 = fs_->ReadDir(dirstream);
+  }
+  fs_->UnMount();
+//  fs_->DestroyFS();
   fs_.reset();
   return 0;
 }

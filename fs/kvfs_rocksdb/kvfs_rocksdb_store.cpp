@@ -23,16 +23,9 @@ RocksDBStore::~RocksDBStore() {
 
 void RocksDBStore::close() {
   db_handle->db.reset();
-//  db_handle.reset();
 }
 
 bool RocksDBStore::put(const std::string &key, const std::string &value) {
-//  auto txn = db_handle->db->BeginTransaction(WriteOptions());
-
-//  txn->Put(key, value);
-
-//  auto status = txn->Commit();
-
   auto status = db_handle->db->Put(rocksdb::WriteOptions(), key, value);
   return status.ok();
 }
@@ -53,9 +46,6 @@ StoreResult RocksDBStore::get(const std::string &key) {
 }
 
 bool RocksDBStore::delete_(const std::string &key) {
-//  auto txn = db_handle->db->BeginTransaction(WriteOptions());
-//  txn->Delete(key);
-//  auto status = txn->Commit();
   auto status = db_handle->db->Delete(rocksdb::WriteOptions(), key);
   return status.ok();
 }
@@ -108,12 +98,7 @@ bool RocksDBStore::compact() {
 }
 
 bool RocksDBStore::merge(const std::string &key, const std::string &value) {
-//  auto txn = db_handle->db->BeginTransaction(WriteOptions());
-//  txn->Merge(key, value);
   if (this->get(key).isValid()) {
-//    auto status = db_handle->db->Merge(rocksdb::WriteOptions(), key, value);
-//    return status.ok();
-//  } else{
     auto status = db_handle->db->Delete(rocksdb::WriteOptions(), key);
     status = db_handle->db->Put(rocksdb::WriteOptions(), key, value);
     return status.ok();
@@ -123,12 +108,8 @@ bool RocksDBStore::merge(const std::string &key, const std::string &value) {
 }
 
 bool RocksDBStore::delete_range(const std::string &start, const std::string &end) {
-//  auto txn = db_handle->db->BeginTransaction(WriteOptions());
-
-//  txn->SetSavePoint();
   auto status = db_handle->db->DeleteRange(WriteOptions(), db_handle->db->DefaultColumnFamily(), start, end);
   return status.ok();
-//  txn->PopSavePoint();
 }
 
 namespace {
@@ -162,9 +143,8 @@ void RocksDBWriteBatch::flush() {
   write_batch.Clear();
 }
 
-
 RocksDBWriteBatch::RocksDBWriteBatch(const std::shared_ptr<kvfs::RocksHandles> db_handle)
-    : Store::WriteBatch(), db_handle_(db_handle), write_batch(){}
+    : Store::WriteBatch(), db_handle_(db_handle), write_batch() {}
 
 void RocksDBWriteBatch::put(const std::string &key, const std::string &value) {
   write_batch.Put(key, value);

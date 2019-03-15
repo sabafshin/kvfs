@@ -167,11 +167,11 @@ struct kvfsMetaData {
     fstat_.st_uid = getuid();
     fstat_.st_gid = getgid();
     // link count
-    if (S_ISREG(mode)) {
+//    if (S_ISREG(mode)) {
       fstat_.st_nlink = 1;
-    } else {
+    /*} else {
       fstat_.st_nlink = 2;
-    }
+    }*/
     fstat_.st_blocks = 0;
     fstat_.st_size = 0;
     // set parent

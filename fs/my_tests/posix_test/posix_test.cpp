@@ -23,49 +23,53 @@ void write_read_test() {
 //  std::string file_name = "../..////./Hi.txt";
   std::string file_name = "Hi.txt";
 
-  auto data = "123456789abcdefghijklmnop"; // 25 bytes
-  size_t data_size = strlen(data);
-
-  auto start = std::chrono::high_resolution_clock::now();
+  std::string data(100 * 1024 * 1024, 'x'); // 25 bytes
+  size_t data_size = 100 * 1024 * 1024;
 
   int fd_ = open(file_name.c_str(), flags, mode);
 
+  auto start = std::chrono::high_resolution_clock::now();
   int TOTAL_DATA = 1000000;
 
-  const void *buffer_w = data;
+  const void *buffer_w = data.c_str();
 
-  int total_data_size = 0;
+  ssize_t total_data_size = write(fd_, buffer_w, data_size);
 
-  for (int i = 0; i < TOTAL_DATA; i++) {
+  /*for (int i = 0; i < TOTAL_DATA; i++) {
 
     ssize_t size = write(fd_, buffer_w, data_size);
 
     total_data_size += size;
 
-  }
+  }*/
+
   std::cout << "Wrote : " << total_data_size << std::endl;
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms\n";
   total_data_size = 0;
+  void *buffer_r = std::malloc(data_size);
 
-  for (int i = 0; i < TOTAL_DATA; ++i) {
+  start = std::chrono::high_resolution_clock::now();
+  total_data_size = pread(fd_, buffer_r, data_size, 0);
+  /* for (int i = 0; i < TOTAL_DATA; ++i) {
 
-    void *buffer_r = std::malloc(data_size);
+     void *buffer_r = std::malloc(data_size);
 
-    auto cur_read = pread(fd_, buffer_r, data_size, total_data_size);
-    free(buffer_r);
+     auto cur_read = pread(fd_, buffer_r, data_size, total_data_size);
+     free(buffer_r);
 
-    total_data_size += cur_read;
-  }
+     total_data_size += cur_read;
+   }*/
+  finish = std::chrono::high_resolution_clock::now();
   std::cout << "Read : " << total_data_size << std::endl;
+  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms\n";
   fsync(fd_);
   close(fd_);
-
-  auto finish = std::chrono::high_resolution_clock::now();
-
-  std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count() << "ms\n";
+  remove(file_name.c_str());
 }
 
 int main() {
-  auto contents = "123456789abcdefghijklmnop";
+//  auto contents = "123456789abcdefghijklmnop";
 
   /*int fd = open("/tmp/something.txt", O_CREAT | O_RDWR | O_APPEND);
 

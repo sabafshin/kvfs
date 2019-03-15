@@ -42,7 +42,9 @@ kvfs::StoreResult kvfs::kvfsLevelDBStore::get(const std::string &key) {
   return StoreResult(std::move(value));
 }
 bool kvfs::kvfsLevelDBStore::delete_(const std::string &key) {
-  auto status = db_handle->db->Delete(leveldb::WriteOptions(), key);
+  leveldb::WriteOptions options;
+  options.sync = true;
+  auto status = db_handle->db->Delete(options, key);
   return status.ok();
 }
 bool kvfs::kvfsLevelDBStore::delete_range(const std::string &start, const std::string &end) {
