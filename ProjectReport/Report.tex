@@ -665,7 +665,7 @@ To test the performance of metadata intensive workload in {\bf kvfs} against ext
 
 \chapter{Related work}
 %explain relate work in this area
-\textbf{Pmemfile} \cite{pmemfile} is project with the goal to provide low-overhead userspace implementation of file APIs using persistent memory. This has similar goals to my project, achieves the no kernel overhead design and current applications can run with this file system using LD\_PRELOAD. However the project does not use a key value store engine, rather directly uses persistent memory programming kit \cite{pmdk}.
+\textbf{Pmemfile} \cite{pmemfile} "is project with the goal to provide low-overhead userspace implementation of file APIs using persistent memory." This has similar goals to my project, achieves the no kernel overhead design and current applications can run with this file system using LD\_PRELOAD. However the project does not use a key value store engine, rather directly uses persistent memory programming kit \cite{pmdk}.
 \\ {\bf kvfs} on the other hand, links directly with the user application, but that would mean limited compatibility. However, {\bf kvfs} can be used with self encrypting key value store engines, to support encryption. Furthermore, with the upcoming KVSSDs, {\bf kvfs} could possibly perform similarly to pmemfile project, in terms of performance.
 \\ Next C++20 standard \cite{std_fs}, will standardise file APIs, therefore {\bf kvfs} could be implemented in a standard way, to support more operating system and easily integrate into user applications.
 
@@ -680,7 +680,6 @@ In this paper I presented {\bf kvfs} a user space file system based on key value
 {\bf kvfs} current implementation, updates file's attributes whenever the file is accessed. This produces an overhead which could potentially be done in the background, such that read/write operations take less even less time. A thread pool can be designed to push low priority updates to background. This thread poll would be an internal feature of {\bf kvfs}. 
 
 A POSIX compliance benchmark test for {\bf kvfs} is for future contribution, for correct expected behaviour. This is a large project on its own and was out of scope of this project.
-
 
 A system call intercept library can also be implemented for {\bf kvfs}, to seamlessly run user application on {\bf kvfs} without application modification. Another difficult task which was not possible to achieve in the time frame of this project.
 
