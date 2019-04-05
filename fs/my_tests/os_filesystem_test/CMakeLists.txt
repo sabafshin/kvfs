@@ -1,0 +1,4 @@
+add_subdirectory(rw_test)
+add_subdirectory(os_random_rw_test)
+add_subdirectory(os_seq_rw_test)
+add_subdirectory(os_nested_directories_test)

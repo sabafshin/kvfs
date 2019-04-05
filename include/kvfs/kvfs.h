@@ -1,203 +1,135 @@
-// Copyright 2018 Afshin Sabahi. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
 /*
-/**
- * @brief Header file for kvfs.cpp
- * 
- * @file kvfs.h
- * @author Afshin Sabahi
+ * Copyright (c) 2019 Afshin Sabahi. All rights reserved.
+ * Use of this source code is governed by a BSD-style
+ * license that can be found in the LICENSE file.
+ *
+ *      Author: Afshin Sabahi
+ *      File:   kvfs.h
  */
+
+#ifndef KVFS_FILESYSTEM_H
+#define KVFS_FILESYSTEM_H
+
+#include "fs.h"
+
+#if KVFS_HAVE_ROCKSDB
+#include <kvfs_rocksdb/kvfs_rocksdb_store.h>
+#endif
+#if KVFS_HAVE_LEVELDB
+#include <kvfs_leveldb/kvfs_leveldb_store.h>
+#endif
+#include <inodes/open_files_cache.h>
+#include <inodes/inode_cache.h>
+#include <kvfs/super.h>
+#include <time.h>
+#include <fcntl.h>
+#include <kvfs/fs_error.h>
+#include <filesystem>
+#include <limits>
+#include <stdlib.h>
+#include <mutex>
 #include <iostream>
-#include <cassert>
-#include <dirent.h>
+#include <array>
+#include <algorithm>
+#include <string.h>
+#include <cstring>
+#include <linux/fs.h>
+#include <unistd.h>
+#include <chrono>
 
-// Rocksdb includes
-#include <rocksdb/db.h>
+namespace kvfs {
 
-#include <errno.h>
+#define time_now std::time(nullptr)
 
-/**
- * @brief Initilises FS, creates a DB and configures it with 
- * options.
- * 
- * @param db_path_ the path where the DB will be created.
- * @param db_options_path_ the path where the preconfigured options are written. 
- * This is a Rocks DB options file.
- */
-void init(const string* db_path_, const string* db_options_path_);
-/**
- * @brief Same init but uses default paths for DB and create a default options.
- * 
- */
-void init();
+class KVFS : public FS {
+ public:
+  explicit KVFS(const std::string &mount_path);
+  KVFS();
+  ~KVFS();
 
+ protected:
+  char *GetCWD(char *buffer, size_t size) override;
+  std::string GetCurrentDirName() override;
+  int ChDir(const char *path) override;
+  kvfsDIR *OpenDir(const char *path) override;
+  kvfs_dirent *ReadDir(kvfsDIR *dirstream) override;
+  int CloseDir(kvfsDIR *dirstream) override;
+  int Link(const char *oldname, const char *newname) override;
+  int SymLink(const char *path1, const char *path2) override;
+  ssize_t ReadLink(const char *filename, char *buffer, size_t size) override;
+  int UnLink(const char *filename) override;
+  int RmDir(const char *filename) override;
+  int Remove(const char *filename) override;
+  int Rename(const char *oldname, const char *newname) override;
+  int MkDir(const char *filename, mode_t mode) override;
+  int Stat(const char *filename, kvfs_stat *buf) override;
+  int ChMod(const char *filename, mode_t mode) override;
+  int Access(const char *filename, int how) override;
+  int UTime(const char *filename, const struct utimbuf *times) override;
+  int Truncate(const char *filename, off_t length) override;
+  int Mknod(const char *filename, mode_t mode, dev_t dev) override;
+  void TuneFS() override;
+  int Open(const char *filename, int flags, mode_t mode) override;
+  int Close(int filedes) override;
+  ssize_t Read(int filedes, void *buffer, size_t size) override;
+  ssize_t Write(int filedes, const void *buffer, size_t size) override;
+  off_t LSeek(int filedes, off_t offset, int whence) override;
+  ssize_t CopyFileRange(int inputfd,
+                        off64_t *inputpos,
+                        int outputfd,
+                        off64_t *outputpos,
+                        ssize_t length,
+                        unsigned int flags) override;
+  void Sync() override;
+  int FSync(int filedes) override;
+  ssize_t PRead(int filedes, void *buffer, size_t size, off_t offset) override;
+  ssize_t PWrite(int filedes, const void *buffer, size_t size, off_t offset) override;
+  void DestroyFS() override;
+  int UnMount() override;
 
-
-typedef uint eqtype;
-typedef char** val;
-typedef bool mode;
-typedef bool open_mode;
-typedef vector<char> flags;
-typedef bool stat;
-typedef bool access_mode;
-
-/**
- * @brief KVFS class
- * 
- */
-class kvfs{
-    eqtype uid;
-    eqtype gid;
-    eqtype file_desc;
-
-    /**
-     * @brief Convert between an abstract open file descriptor 
-     * and the integer representation used by 
-     * the operating system.
-     * 
-     * @param file_desc 
-     * @return eqtype 
-     */
-    eqtype kvfs_fdToWord(eqtype* file_desc);
-    eqtype kvfs_wordToFD(eqtype* i);
-    
-    /** 
-     * @brief Opens the directory designated by dirName parameter 
-     * and associates a directory stream with it. The directory stream
-     * is positioned at the first entry. A directory stream is an 
-     * ordered sequence of all the directory entries in a particular directory. 
-     * 
-     * @param dirName 
-     */
-    void kvfs_openDir(DIR dirName);
-
-    /**
-     * @brief Read the next filename in the directory stream d. 
-     * Entries for "." (current directory) 
-     * and ".." (parent directory) are never returned.
-     * 
-     * @param d 
-     */
-    void kvfs_readDir(DIR d);
-
-    void kvfs_rewindDir(DIR d);
-
-    void kvfs_closeDir(DIR d);
-
-    void kvfs_chDir(DIR s);
-
-    DIR kvfs_getcwd();
-
-    struct kvfs_S{
-        //include POSIX_FLAGS
-        flags POSIX_FLAGS;
-
-        mode irwxu;
-        mode irusr;
-        mode iwusr;
-        mode ixusr;
-
-        mode irwxg;
-        mode irgrp;
-        mode iwgrp;
-        mode ixgrp;
-
-        mode irwxo;
-        mode iroth;
-        mode iwoth;
-        mode ixoth;
-
-        mode isuid;
-        mode isgid;
-    };
-
-    struct kvfs_O{
-        //include POSIX_FLAGS
-        flags POSIX_FLAGS;
-
-        mode append;
-        mode excl;
-        mode noctty;
-        mode nonblock;
-        mode sync;
-
-        mode trunct;
-    };
-
-    open_mode kvfs_open_mode;
-    
-    void kvfs_openf (val s, open_mode om, flags f);
-    void kvfs_createf (val s, open_mode om, flags f, mode m);
-
-    void kvfs_creat(val s, mode m);
-
-    __cpu_mask kvfs_umask( __cpu_mask cmask);
-
-    void kvfs_link(val _old, val _new);
-
-    void kvfs_mkdir(val s, mode m);
-    void kvfs_mkfifo(val s, mode m);
-
-    void kvfs_unlink(val path);
-
-    void kvfs_rmdir(val s);
-    void kvfs_rename(val _old, val _new);
-
-    void kvfs_symlink(val _old, val _new);
-    void kvfs_readlink(val s);
-
-    /**
-     * @brief Device Identifier.
-     * File serial number (I-node) and device ID uniquely identify a file
-     */
-    eqtype dev;
-
-    eqtype kvfs_wordToDev(val i);
-    val kvfs_devToWord (eqtype dev);
-private:
-    eqtype ino;
-public:    
-    eqtype kvfs_wordToIno(val i);
-    val kvfs_inoToWord();
-private:
-    struct kvfs_ST{
-        stat isDir;
-        stat isChr;
-        stat isBlk;
-        stat isReg;
-        stat isFIFO;
-        stat isLink;
-        stat isSock;
-        mode st_mode;
-        
-        eqtype st_ino;
-        eqtype st_dev;
-
-        eqtype st_nlink;
-        eqtype uid;
-        eqtype gid;
-        
-        size_t size;
-
-        uint atime;
-        uint mtime;
-        uint ctime;
-    };
-
-public:
-    void kvfs_access(val s, access_mode l);
-
-    void kvfs_chmod(val s, access_mode mode);
-    void kvfs_fchmod(val fd, access_mode mode);
-    
-    void kvfs_chown(val s, eqtype uid, eqtype gid);
-    void kvfs_fchown(val fd, eqtype uid, eqtype gid);
-
-    void kvfs_utime(val s, access_mode a, uint m);
-    void kvfs_utime(val s);
-
-    void kvfs_ftruncate(val fd, uint n);
-    void kvfs_pathconf(val s, bool property);
-
+ private:
+  std::filesystem::path root_path;
+  std::shared_ptr<KVStore> store_;
+//  std::unique_ptr<InodeCache> inode_cache_;
+  std::unique_ptr<OpenFilesCache> open_fds_;
+  kvfsSuperBlock super_block_{};
+  int8_t errorno_;
+  std::filesystem::path cwd_name_;
+  std::filesystem::path pwd_;
+  kvfsInodeValue current_md_{};
+  kvfsInodeKey current_key_{};
+  uint32_t next_free_fd_{};
+  std::vector<uint32_t> free_fds{};
+#if KVFS_THREAD_SAFE
+  std::unique_ptr<std::mutex> mutex_;
+#endif
+  // Private Methods
+ private:
+  void FSInit();
+  bool CheckNameLength(const std::filesystem::path &path);
+  std::pair<std::filesystem::path,
+            std::pair<kvfsInodeKey, kvfsInodeValue>> ResolvePath(const std::filesystem::path &input);
+  std::filesystem::path GetSymLinkContentsPath(const kvfsInodeValue &data);
+  bool FreeUpInodeNumber(const kvfs_file_inode_t &inode);
+  kvfs_file_inode_t GetFreeInode();
+  uint32_t GetFreeFD();
+  ssize_t WriteBlocks(kvfsBlockKey blck_key_, size_t blcks_to_write_, const void *buffer, size_t buffer_size_);
+  std::pair<ssize_t, const void *> FillBlock(kvfsBlockValue *blck_,
+                                             const void *buffer,
+                                             size_t buffer_size_,
+                                             kvfs_off_t offset);
+  std::pair<ssize_t, void *> ReadBlock(kvfsBlockValue *blck_, void *buffer, size_t size, off_t offset);
+  ssize_t ReadBlocks(kvfsBlockKey blck_key_, size_t blcks_to_read_, size_t buffer_size_, void *buffer);
+  std::pair<std::filesystem::path,
+            std::pair<kvfs::kvfsInodeKey, kvfs::kvfsInodeValue>> RealPath(const std::filesystem::path &input);
+  void FreeUpFD(uint32_t filedes);
 };
+
+}  // namespace kvfs
+
+struct __kvfs_dir_stream {
+  uint32_t file_descriptor_;
+  std::unique_ptr<kvfs::KVStore::Iterator> ptr_;
+};
+
+#endif //KVFS_FILESYSTEM_H

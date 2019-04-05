@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/leveldb" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/rocksdb" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/spdk" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/spdk/dpdk" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/spdk/intel-ipsec-mb" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/spdk/isa-l" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/spdk/ocf" vcs="Git" />
+  </component>
+</project>
