@@ -13,44 +13,44 @@
 #include "kvfs_rocksdb_handler.h"
 #include "kvfs_rocksdb_exception.h"
 
-#include <store/store.h>
-#include <store/store_entry.h>
-#include <store/store_result.h>
+#include <kvfs_store/kvfs_store.h>
+#include <kvfs_store/kvfs_store_entry.h>
+#include <kvfs_store/kvfs_store_result.h>
 #include <rocksdb/options.h>
 #include <rocksdb/db.h>
 
 namespace kvfs {
 
-class RocksDBStore : public Store {
+class kvfsRocksDBStore : public KVStore {
  public:
-  explicit RocksDBStore(const string &_db_path);
+  explicit kvfsRocksDBStore(const std::string &_db_path);
 
-  ~RocksDBStore();
+  ~kvfsRocksDBStore();
 
  protected:
-  void close() override;
+  void Close() override;
 
-  bool put(const std::string &key, const std::string &value) override;
+  bool Put(const std::string &key, const std::string &value) override;
 
-  bool merge(const std::string &key, const std::string &value) override;
+  bool Merge(const std::string &key, const std::string &value) override;
 
-  StoreResult get(const std::string &key) override;
+  KVStoreResult Get(const std::string &key) override;
 
-  bool delete_(const std::string &key) override;
-  bool delete_range(const std::string &start, const std::string &end) override;
+  bool Delete(const std::string &key) override;
+  bool DeleteRange(const std::string &start, const std::string &end) override;
 
-  std::vector<StoreResult> get_children(const std::string &key) override;
-  StoreResult get_parent(const std::string &key) override;
+  std::vector<KVStoreResult> GetChildren(const std::string &key) override;
+  KVStoreResult GetParent(const std::string &key) override;
 
-  bool sync() override;
+  bool Sync() override;
 
-  bool compact() override;
+  bool Compact() override;
 
-  bool destroy() override;
+  bool Destroy() override;
 
-  std::unique_ptr<WriteBatch> get_write_batch() override;
+  std::unique_ptr<WriteBatch> GetWriteBatch() override;
 
-  std::unique_ptr<Iterator> get_iterator() override;
+  std::unique_ptr<Iterator> GetIterator() override;
 
  private:
   std::shared_ptr<RocksHandles> db_handle;

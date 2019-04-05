@@ -1,3 +1,5 @@
+#include <utility>
+
 /*
  * Copyright (c) 2019 Afshin Sabahi. All rights reserved.
  * Use of this source code is governed by a BSD-style
@@ -12,8 +14,8 @@
 namespace kvfs {
 
 FSError::FSError
-    (const FSErrorType &error_type_, const std::string &message)
-    : error_t(error_type_), msg_(message) {
+    (const FSErrorType &error_type, std::string message)
+    : error_t(error_type), msg_(std::move(message)) {
   full_msg_ = "[FS ERROR] : ";
   switch (error_t) {
     case FSErrorType::FS_EINVAL:full_msg_ += "(EINVAL) ";
@@ -56,13 +58,17 @@ FSError::FSError
       break;
     case FSErrorType::FS_ELOOP:full_msg_ += "(ELOOP) ";
       break;
+    case FSErrorType::FS_EBADVALUESIZE:full_msg_ += "(EBADVALUESIZE) ";
+      break;
+    case FSErrorType::FS_EBADFD:full_msg_ += "(EBADFD) ";
+      break;
   }
-
   full_msg_ += "(" + msg_ + ")";
-
 }
 const char *FSError::what() const noexcept {
   return full_msg_.c_str();
 }
-
+const FSErrorType FSError::error_code() const noexcept {
+  return error_t;
+}
 }  // namespace kvfs

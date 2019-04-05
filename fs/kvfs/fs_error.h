@@ -16,37 +16,39 @@
 #include <iostream>
 
 namespace kvfs {
-enum class FSErrorType : uint8_t {
-  FS_EINVAL,
-  FS_ERANGE,
-  FS_EACCES,
-  FS_EBADF,
-  FS_ENOTDIR,
-  FS_EINTR,
-  FS_EIO,
-  FS_EEXIST,
-  FS_ENOENT,
-  FS_EMLINK,
-  FS_ENOSPC,
-  FS_EROFS,
-  FS_EPERM,
-  FS_EXDEV,
-  FS_EBUSY,
-  FS_EISDIR,
-  FS_EFTYPE,
-  FS_ENAMETOOLONG,
-  FS_ENFILE,
-  FS_ELOOP
+enum class FSErrorType : int8_t {
+  FS_EINVAL = -EINVAL,
+  FS_ERANGE = -ERANGE,
+  FS_EACCES = -EACCES,
+  FS_EBADF = -EBADF,
+  FS_ENOTDIR = -ENOTDIR,
+  FS_EINTR = -EINTR,
+  FS_EIO = -EIO,
+  FS_EEXIST = -EEXIST,
+  FS_ENOENT = -ENOENT,
+  FS_EMLINK = -EMLINK,
+  FS_ENOSPC = -ENOSPC,
+  FS_EROFS = -EROFS,
+  FS_EPERM = -EPERM,
+  FS_EXDEV = -EXDEV,
+  FS_EBUSY = -EBUSY,
+  FS_EISDIR = -EISDIR,
+  FS_EFTYPE = -105,
+  FS_ENAMETOOLONG = -ENAMETOOLONG,
+  FS_ENFILE = -ENFILE,
+  FS_ELOOP = -ELOOP,
+  FS_EBADVALUESIZE = -106,
+  FS_EBADFD = -EBADFD
 };
 
 class FSError : public std::exception {
  public:
-  FSError(const FSErrorType &errorno, const std::string &message);
+  FSError(const FSErrorType &error_type, std::string message);
 
   const char *what() const noexcept override;
-
+  const FSErrorType error_code() const noexcept;
  private:
-  FSErrorType error_t;
+  const FSErrorType &error_t;
   std::string msg_;
   std::string full_msg_;
 };

@@ -16,8 +16,8 @@ namespace kvfs {
 
 class RocksException : public std::exception {
  public:
-  RocksException(const rocksdb::Status &status, const std::string &msg);
-  RocksException(bool status, const std::string &msg);
+  RocksException(rocksdb::Status status, std::string msg);
+  RocksException(bool status, std::string msg);
 
   const char *what() const noexcept override;
 

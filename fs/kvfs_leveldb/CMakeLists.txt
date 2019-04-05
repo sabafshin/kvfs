@@ -30,7 +30,7 @@ add_library(
 
 target_link_libraries(
     ${PROJECT_NAME}
-    LINK_PUBLIC
+    PRIVATE
     ${LEVELDB_LIB}
     ${CMAKE_THREAD_LIBS_INIT}
 )

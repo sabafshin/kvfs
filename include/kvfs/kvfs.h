@@ -18,10 +18,9 @@
 #if KVFS_HAVE_LEVELDB
 #include <kvfs_leveldb/kvfs_leveldb_store.h>
 #endif
-#include <inodes/directory_entry_cache.h>
+#include <inodes/open_files_cache.h>
 #include <inodes/inode_cache.h>
 #include <kvfs/super.h>
-#include <kvfs_utils/mutex.h>
 #include <time.h>
 #include <fcntl.h>
 #include <kvfs/fs_error.h>
@@ -50,7 +49,7 @@ class KVFS : public FS {
 
  protected:
   char *GetCWD(char *buffer, size_t size) override;
-  char *GetCurrentDirName() override;
+  std::string GetCurrentDirName() override;
   int ChDir(const char *path) override;
   kvfsDIR *OpenDir(const char *path) override;
   kvfs_dirent *ReadDir(kvfsDIR *dirstream) override;
@@ -90,16 +89,17 @@ class KVFS : public FS {
 
  private:
   std::filesystem::path root_path;
-  std::shared_ptr<Store> store_;
+  std::shared_ptr<KVStore> store_;
 //  std::unique_ptr<InodeCache> inode_cache_;
-  std::unique_ptr<DentryCache> open_fds_;
+  std::unique_ptr<OpenFilesCache> open_fds_;
   kvfsSuperBlock super_block_{};
   int8_t errorno_;
   std::filesystem::path cwd_name_;
   std::filesystem::path pwd_;
-  kvfsMetaData current_md_{};
-  kvfsDirKey current_key_{};
+  kvfsInodeValue current_md_{};
+  kvfsInodeKey current_key_{};
   uint32_t next_free_fd_{};
+  std::vector<uint32_t> free_fds{};
 #if KVFS_THREAD_SAFE
   std::unique_ptr<std::mutex> mutex_;
 #endif
@@ -107,37 +107,29 @@ class KVFS : public FS {
  private:
   void FSInit();
   bool CheckNameLength(const std::filesystem::path &path);
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> ResolvePath(const std::filesystem::path &input);
-  inline bool starts_with(const std::string &s1, const std::string &s2);
-  std::filesystem::path GetSymLinkContentsPath(const kvfsMetaData &data);
+  std::pair<std::filesystem::path,
+            std::pair<kvfsInodeKey, kvfsInodeValue>> ResolvePath(const std::filesystem::path &input);
+  std::filesystem::path GetSymLinkContentsPath(const kvfsInodeValue &data);
+  bool FreeUpInodeNumber(const kvfs_file_inode_t &inode);
   kvfs_file_inode_t GetFreeInode();
-  bool FreeUpBlock(const kvfsBlockKey &key);
-  kvfsBlockKey GetFreeBlock();
   uint32_t GetFreeFD();
-  std::pair<ssize_t, kvfs::kvfsBlockKey> WriteBlocks(kvfsBlockKey blck_key_,
-                                                     size_t blcks_to_write_,
-                                                     const void *buffer,
-                                                     size_t buffer_size_,
-                                                     kvfs_off_t offset);
+  ssize_t WriteBlocks(kvfsBlockKey blck_key_, size_t blcks_to_write_, const void *buffer, size_t buffer_size_);
   std::pair<ssize_t, const void *> FillBlock(kvfsBlockValue *blck_,
                                              const void *buffer,
                                              size_t buffer_size_,
                                              kvfs_off_t offset);
   std::pair<ssize_t, void *> ReadBlock(kvfsBlockValue *blck_, void *buffer, size_t size, off_t offset);
-  ssize_t ReadBlocks(kvfsBlockKey blck_key_,
-                     size_t blcks_to_read_,
-                     size_t buffer_size_,
-                     off_t offset,
-                     void *buffer);
+  ssize_t ReadBlocks(kvfsBlockKey blck_key_, size_t blcks_to_read_, size_t buffer_size_, void *buffer);
   std::pair<std::filesystem::path,
-            std::pair<kvfs::kvfsDirKey, kvfs::kvfsMetaData>> RealPath(const std::filesystem::path &input);
+            std::pair<kvfs::kvfsInodeKey, kvfs::kvfsInodeValue>> RealPath(const std::filesystem::path &input);
+  void FreeUpFD(uint32_t filedes);
 };
 
 }  // namespace kvfs
 
 struct __kvfs_dir_stream {
   uint32_t file_descriptor_;
-  std::unique_ptr<kvfs::Store::Iterator> ptr_;
+  std::unique_ptr<kvfs::KVStore::Iterator> ptr_;
 };
 
 #endif //KVFS_FILESYSTEM_H

@@ -9,18 +9,21 @@
 
 #include "kvfs_leveldb_handler.h"
 
-kvfs::LevelDBHandles::LevelDBHandles(std::string dbPath) {
+kvfs::LevelDBHandles::LevelDBHandles(const std::string &dbPath) {
   leveldb::Options options;
   options.create_if_missing = true;
-  options.block_size = 4096;
+//  options.block_size = 4096; //4KiB
+//  options.max_file_size = 67108864; // 64MiB
+//  options.block_cache = leveldb::NewLRUCache(1000000);
   options.paranoid_checks = false;
-  options.compression = leveldb::CompressionType::kNoCompression;
+  options.compression = leveldb::CompressionType::kSnappyCompression;
   options.reuse_logs = true;
+//  options.write_buffer_size = 134217728; // 128MiB
 
   leveldb::DB *db_raw;
   auto status = leveldb::DB::Open(options, dbPath, &db_raw);
   if (!status.ok()) {
-    throw std::runtime_error("Failed to open DB at the given path");
+    throw LevelDBException(status, "Failed to open DB at the given path");
   }
   db.reset(db_raw);
 }

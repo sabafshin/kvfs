@@ -22,9 +22,9 @@ RocksHandles::~RocksHandles() {
   db.reset();
 }
 
-RocksHandles::RocksHandles(string dbPath) {
+RocksHandles::RocksHandles(const std::string &dbPath) {
 
-  Options options;
+  rocksdb::Options options;
   // Optimize RocksDB. This is the easiest way to get RocksDB to perform well.
   options.IncreaseParallelism();
   options.enable_pipelined_write = true;
@@ -72,7 +72,7 @@ RocksIterator::~RocksIterator() {
 }
 
 RocksIterator::RocksIterator(RocksHandles db) {
-  it.reset(db.db->NewIterator(ReadOptions()));
+  it.reset(db.db->NewIterator(rocksdb::ReadOptions()));
 }
 RocksCache::~RocksCache() {
   cache.reset();

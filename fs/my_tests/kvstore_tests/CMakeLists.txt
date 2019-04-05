@@ -1,0 +1,4 @@
+#add_subdirectory(store_test)
+#add_subdirectory(store_speed_test)
+add_subdirectory(kvstore_random_rw_test)
+add_subdirectory(kvstore_seq_rw_test)

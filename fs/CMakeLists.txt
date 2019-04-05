@@ -12,9 +12,9 @@ if (BuildWithLevelDB)
   add_subdirectory(kvfs_leveldb)
 endif ()
 
-add_subdirectory(store)
+add_subdirectory(kvfs_store)
 add_subdirectory(inodes)
-add_subdirectory(kvfs_utils)
+#add_subdirectory(kvfs_utils) not needed anymore
 
 if (BuildWithTests)
   add_subdirectory(my_tests)

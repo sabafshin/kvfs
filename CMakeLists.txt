@@ -2,10 +2,7 @@
 ## Use of this source code is governed by a BSD-style
 ## license that can be found in the LICENSE file.
 
-# CMakeList.txt : Top-level CMake project file, do global configuration
-# and include sub-projects here.
-#
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.9)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -17,9 +14,18 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/CMake/")
 include(CompilerSettingsUnix)
 include(kvfsConfigChecks)
 
+########### KVFS Configs ############################################
+set(KVFS_VERSION_C "1.0")
+set(KVFS_MAX_OPEN_FILES_C "512")
+set(KVFS_CACHE_SIZE_C "512")
+set(KVFS_BLOCK_SIZE_C "4096")
+set(KVFS_MAX_HARDLINK_COUNT_C "1000")
+
 option(BuildWithTests "Build Kvfs tests" ON)
 option(BuildWithRocksDB "BuildWithRocksDB" OFF)
 option(BuildWithLevelDB "BuildWithLevelDB" ON)
+option(BuildWithThreadSafety "BuildWithThreadSafety" OFF)
+#####################################################################
 
 if (BuildWithRocksDB)
   ########## RocksDB Config #########################################
@@ -48,10 +54,10 @@ endif ()
 if (BuildWithLevelDB)
   add_compile_options("-fPIC")
   ########## Leveldb configs ################################
-  option(LEVELDB_BUILD_TESTS "Build LevelDB's unit tests" ON)
-  option(LEVELDB_BUILD_BENCHMARKS "Build LevelDB's benchmarks" OFF)
+  option(LEVELDB_BUILD_TESTS "Build LevelDB's unit tests" OFF)
+  option(LEVELDB_BUILD_BENCHMARKS "Build LevelDB's benchmarks" ON)
   option(LEVELDB_INSTALL "Install LevelDB's header and library" OFF)
-  option(BUILD_WITH_SHARED_LIBS ON)
+  option(BUILD_SHARED_LIBS ON)
   set(LEVELDB_LIB leveldb)
   set(LEVELDB_SOURCE_DIR ${PROJECT_SOURCE_DIR}/third_party/leveldb)
   add_subdirectory(${LEVELDB_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/third_party/leveldb)
@@ -62,11 +68,10 @@ if (BuildWithLevelDB)
   message("-- Building with LevelDB as backing key-value store")
 endif ()
 
-set(PACKAGE_VERSION "1.0")
-set(MAX_OPEN_FILES "512")
-set(CACHE_SIZE "512")
-set(BLOCK_SIZE "4096")
-#set(KVFS_THREAD_SAFE "1")
+if (BuildWithThreadSafety)
+  set(KVFS_THREAD_SAFE "1")
+endif ()
+
 configure_file(
     ${PROJECT_SOURCE_DIR}/CMake/kvfs_config.h.in
     ${PROJECT_SOURCE_DIR}/config/kvfs_config.h
@@ -81,7 +86,8 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/fs)
 set(
     KVFS_SRCS
     fs/kvfs/kvfs.cpp
-    fs/kvfs/fs_error.cpp)
+    fs/kvfs/fs_error.cpp
+    fs/kvfs/super.cpp)
 
 source_group("Source Files" FILES ${KVFS_SRCS})
 
@@ -106,7 +112,6 @@ if (BuildWithRocksDB)
   target_link_libraries(
       ${PROJECT_NAME}
       PRIVATE
-      kvfs_utils
       kvfs_rocksdb
       kvfs_store
       kvfs_inodes
@@ -117,7 +122,6 @@ if (BuildWithLevelDB)
   target_link_libraries(
       ${PROJECT_NAME}
       PRIVATE
-      kvfs_utils
       kvfs_leveldb
       kvfs_store
       kvfs_inodes

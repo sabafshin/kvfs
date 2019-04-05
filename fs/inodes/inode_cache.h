@@ -1,5 +1,3 @@
-#include <utility>
-
 /*
  * Copyright (c) 2019 Afshin Sabahi. All rights reserved.
  * Use of this source code is governed by a BSD-style
@@ -12,13 +10,12 @@
 #ifndef KVFS_INODE_CACHE_H
 #define KVFS_INODE_CACHE_H
 
-#include <store/store.h>
-#include <store/store_entry.h>
-#include <kvfs_utils/mutex.h>
-#include <kvfs_utils/mutex_lock.h>
+#include <kvfs_store/kvfs_store.h>
+#include <kvfs_store/kvfs_store_entry.h>
 #include <memory>
 #include <string>
 #include <list>
+#include <mutex>
 #include <unordered_map>
 
 namespace kvfs {
@@ -37,50 +34,44 @@ enum InodeState : uint8_t {
 };
 
 struct InodeCacheEntry {
-  kvfsDirKey key_;
-  kvfsMetaData md_;
+  kvfsInodeKey key_;
+  kvfsInodeValue md_;
   InodeState state;
   InodeAccessMode access_mode;
 
-  InodeCacheEntry(const kvfsDirKey &key, kvfsMetaData value, InodeAccessMode mode)
+  InodeCacheEntry(const kvfsInodeKey &key, kvfsInodeValue value, InodeAccessMode mode)
       : key_(key), md_(value), access_mode(mode) {}
   InodeCacheEntry() : access_mode(INODE_READ) {}
 };
 
 struct InodeCacheComparator {
-  bool operator()(const kvfsDirKey &lhs, const kvfsDirKey &rhs) const {
+  bool operator()(const kvfsInodeKey &lhs, const kvfsInodeKey &rhs) const {
     return (lhs.hash_ == rhs.hash_) && (lhs.inode_ == rhs.inode_);
   }
 };
 
 struct InodeCacheHash {
-  std::size_t operator()(const kvfsDirKey &x) const {
-    std::size_t seed = 0;
-    seed ^= x.inode_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    seed ^= x.hash_ + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    return seed;
-  }
+  std::size_t operator()(const kvfsInodeKey &x) const;
 };
 
 class InodeCache {
  public:
-  typedef std::pair<kvfsDirKey, InodeCacheEntry> Entry;
+  typedef std::pair<kvfsInodeKey, InodeCacheEntry> Entry;
   typedef std::list<Entry> CacheList;
-  typedef std::unordered_map<kvfsDirKey, std::list<Entry>::iterator,
+  typedef std::unordered_map<kvfsInodeKey, std::list<Entry>::iterator,
                              InodeCacheHash, InodeCacheComparator> CacheMap;
 
-  explicit InodeCache(size_t size, const std::shared_ptr<Store> store)
-      : max_size_(size), store_(store) {}
+  explicit InodeCache(size_t size, std::shared_ptr<KVStore> store);
 
-  void insert(const kvfsDirKey &key, const kvfsMetaData &value);
+  void Insert(const kvfsInodeKey &key, const kvfsInodeValue &value);
 
-  bool get(const kvfsDirKey &key, InodeAccessMode mode, InodeCacheEntry &handle);
+  bool Get(const kvfsInodeKey &key, InodeAccessMode mode, InodeCacheEntry &handle);
 
-  void write_back(InodeCacheEntry &key);
+  void WriteBack(InodeCacheEntry &key);
 
-  void evict(const kvfsDirKey &key);
+  void Evict(const kvfsInodeKey &key);
 
-  size_t size();
+  size_t Size();
 
   ~InodeCache() = default;
 
@@ -89,9 +80,10 @@ class InodeCache {
   CacheMap cache_map_lookup_;
   size_t max_size_;
 
-  std::shared_ptr<Store> store_;
+  std::shared_ptr<KVStore> store_;
+  std::unique_ptr<std::mutex> mutex_;
 
-  void clean_inode_handle(InodeCacheEntry handle);
+  void CleanHandle(InodeCacheEntry handle);
 };
 
 }  // namespace kvfs

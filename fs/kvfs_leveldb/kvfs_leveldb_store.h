@@ -10,43 +10,42 @@
 #ifndef KVFS_KVFS_LEVELDB_STORE_H
 #define KVFS_KVFS_LEVELDB_STORE_H
 
-#include <store/store.h>
-#include <store/store_entry.h>
-#include <store/store_result.h>
+#include <kvfs_store/kvfs_store.h>
+#include <kvfs_store/kvfs_store_entry.h>
+#include <kvfs_store/kvfs_store_result.h>
 #include "kvfs_leveldb_exception.h"
 #include "kvfs_leveldb_handler.h"
 
 namespace kvfs {
 
-class kvfsLevelDBStore : public Store {
+class kvfsLevelDBStore : public KVStore {
  public:
   explicit kvfsLevelDBStore(const std::string &db_path);
   ~kvfsLevelDBStore();
 
  protected:
-  void close() override;
+  void Close() override;
 
-  bool put(const std::string &key, const std::string &value) override;
+  bool Put(const std::string &key, const std::string &value) override;
+  bool Merge(const std::string &key, const std::string &value) override;
 
-  bool merge(const std::string &key, const std::string &value) override;
+  KVStoreResult Get(const std::string &key) override;
 
-  StoreResult get(const std::string &key) override;
+  bool Delete(const std::string &key) override;
+  bool DeleteRange(const std::string &start, const std::string &end) override;
 
-  bool delete_(const std::string &key) override;
-  bool delete_range(const std::string &start, const std::string &end) override;
+  std::vector<KVStoreResult> GetChildren(const std::string &key) override;
+  KVStoreResult GetParent(const std::string &key) override;
 
-  std::vector<StoreResult> get_children(const std::string &key) override;
-  StoreResult get_parent(const std::string &key) override;
+  bool Sync() override;
 
-  bool sync() override;
+  bool Compact() override;
 
-  bool compact() override;
+  bool Destroy() override;
 
-  bool destroy() override;
+  std::unique_ptr<WriteBatch> GetWriteBatch() override;
 
-  std::unique_ptr<WriteBatch> get_write_batch() override;
-
-  std::unique_ptr<Iterator> get_iterator() override;
+  std::unique_ptr<Iterator> GetIterator() override;
 
  private:
   std::shared_ptr<LevelDBHandles> db_handle;

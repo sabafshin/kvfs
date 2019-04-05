@@ -16,76 +16,75 @@ kvfs::kvfsLevelDBStore::kvfsLevelDBStore(const std::string &db_path)
 kvfs::kvfsLevelDBStore::~kvfsLevelDBStore() {
   db_handle.reset();
 }
-bool kvfs::kvfsLevelDBStore::put(const std::string &key, const std::string &value) {
+bool kvfs::kvfsLevelDBStore::Put(const std::string &key, const std::string &value) {
   leveldb::Status status = db_handle->db->Put(leveldb::WriteOptions(), key, value);
   return status.ok();
 }
-void kvfs::kvfsLevelDBStore::close() {
+void kvfs::kvfsLevelDBStore::Close() {
   db_handle.reset();
 }
-bool kvfs::kvfsLevelDBStore::merge(const std::string &key, const std::string &value) {
+bool kvfs::kvfsLevelDBStore::Merge(const std::string &key, const std::string &value) {
   db_handle->db->Delete(leveldb::WriteOptions(), key);
   leveldb::Status status = db_handle->db->Put(leveldb::WriteOptions(), key, value);
   return status.ok();
 }
-kvfs::StoreResult kvfs::kvfsLevelDBStore::get(const std::string &key) {
+kvfs::KVStoreResult kvfs::kvfsLevelDBStore::Get(const std::string &key) {
   std::string value;
   leveldb::Status status = db_handle->db->Get(leveldb::ReadOptions(), key, &value);
   if (!status.ok()) {
     if (status.IsNotFound()) {
-      // Return an empty StoreResult
-      return StoreResult();
+      // Return an empty KVStoreResult
+      return KVStoreResult();
     }
     throw LevelDBException(
-        status, "failed to get " + key + " from local store");
+        status, "Failed to get " + key + " from local store");
   }
-  return StoreResult(std::move(value));
+  return KVStoreResult(std::move(value));
 }
-bool kvfs::kvfsLevelDBStore::delete_(const std::string &key) {
+bool kvfs::kvfsLevelDBStore::Delete(const std::string &key) {
   leveldb::WriteOptions options;
   options.sync = true;
   auto status = db_handle->db->Delete(options, key);
   return status.ok();
 }
-bool kvfs::kvfsLevelDBStore::delete_range(const std::string &start, const std::string &end) {
+bool kvfs::kvfsLevelDBStore::DeleteRange(const std::string &start, const std::string &end) {
   return false;
 }
-std::vector<kvfs::StoreResult> kvfs::kvfsLevelDBStore::get_children(const std::string &key) {
-  return std::vector<kvfs::StoreResult>();
+std::vector<kvfs::KVStoreResult> kvfs::kvfsLevelDBStore::GetChildren(const std::string &key) {
+  return std::vector<kvfs::KVStoreResult>();
 }
-kvfs::StoreResult kvfs::kvfsLevelDBStore::get_parent(const std::string &key) {
-  return kvfs::StoreResult();
+kvfs::KVStoreResult kvfs::kvfsLevelDBStore::GetParent(const std::string &key) {
+  return kvfs::KVStoreResult();
 }
-bool kvfs::kvfsLevelDBStore::sync() {
+bool kvfs::kvfsLevelDBStore::Sync() {
   leveldb::WriteOptions options;
   options.sync = true;
   leveldb::Status status = db_handle->db->Put(options, "sync", "");
   return status.ok();
 }
-bool kvfs::kvfsLevelDBStore::compact() {
+bool kvfs::kvfsLevelDBStore::Compact() {
   db_handle->db->CompactRange(nullptr, nullptr);
   return true;
 }
-bool kvfs::kvfsLevelDBStore::destroy() {
+bool kvfs::kvfsLevelDBStore::Destroy() {
   leveldb::DestroyDB(db_name, leveldb::Options());
   return true;
 }
 namespace {
-class LevelDBWriteBatch : public kvfs::Store::WriteBatch {
+class LevelDBWriteBatch : public kvfs::KVStore::WriteBatch {
  public:
-  void put(const std::string &key, const std::string &value) override;
+  void Put(const std::string &key, const std::string &value) override;
+  void Delete(const std::string &key) override;
 
-  void delete_(const std::string &key) override;
+  void Flush() override;
 
-  void flush() override;
-
-  LevelDBWriteBatch(std::shared_ptr<kvfs::LevelDBHandles> db_handle);
+  explicit LevelDBWriteBatch(std::shared_ptr<kvfs::LevelDBHandles> db_handle);
 
   std::shared_ptr<kvfs::LevelDBHandles> db_handle_;
   leveldb::WriteBatch write_batch;
 };
 
-void LevelDBWriteBatch::flush() {
+void LevelDBWriteBatch::Flush() {
   auto pending = write_batch.ApproximateSize();
   if (pending == 0) {
     return;
@@ -95,25 +94,25 @@ void LevelDBWriteBatch::flush() {
 
   if (!status.ok()) {
     throw kvfs::LevelDBException(
-        status, "error putting blob in Store");
+        status, "Error putting blob in KVStore");
   }
 
   write_batch.Clear();
 }
 
 LevelDBWriteBatch::LevelDBWriteBatch(const std::shared_ptr<kvfs::LevelDBHandles> db_handle)
-    : kvfs::Store::WriteBatch(), db_handle_(db_handle), write_batch() {}
+    : kvfs::KVStore::WriteBatch(), db_handle_(db_handle), write_batch() {}
 
-void LevelDBWriteBatch::put(const std::string &key, const std::string &value) {
+void LevelDBWriteBatch::Put(const std::string &key, const std::string &value) {
   write_batch.Put(key, value);
 
 }
 
-void LevelDBWriteBatch::delete_(const std::string &key) {
+void LevelDBWriteBatch::Delete(const std::string &key) {
   write_batch.Delete(key);
 }
 
-class LevelDBIterator : public kvfs::Store::Iterator {
+class LevelDBIterator : public kvfs::KVStore::Iterator {
  public:
 
   explicit LevelDBIterator(const std::shared_ptr<kvfs::LevelDBHandles> &db_handle);
@@ -126,7 +125,7 @@ class LevelDBIterator : public kvfs::Store::Iterator {
   void Next() override;
   void Prev() override;
   std::string key() const override;
-  kvfs::StoreResult value() const override;
+  kvfs::KVStoreResult value() const override;
   bool status() const override;
   void SeekForPrev(const std::string &target) override;
   bool Refresh() override;
@@ -136,8 +135,12 @@ class LevelDBIterator : public kvfs::Store::Iterator {
 };
 
 LevelDBIterator::LevelDBIterator(const std::shared_ptr<kvfs::LevelDBHandles> &db_handle)
-    : kvfs::Store::Iterator(),
-      iterator_(db_handle->db->NewIterator(leveldb::ReadOptions())) {}
+    : kvfs::KVStore::Iterator() {
+  leveldb::ReadOptions options;
+  options.fill_cache = false;
+  iterator_.reset(db_handle->db->NewIterator(options));
+}
+
 bool LevelDBIterator::Valid() const {
   return iterator_->Valid();
 }
@@ -159,8 +162,8 @@ void LevelDBIterator::Prev() {
 std::string LevelDBIterator::key() const {
   return iterator_->key().ToString();
 }
-kvfs::StoreResult LevelDBIterator::value() const {
-  return kvfs::StoreResult(iterator_->value().ToString());
+kvfs::KVStoreResult LevelDBIterator::value() const {
+  return kvfs::KVStoreResult(iterator_->value().ToString());
 }
 bool LevelDBIterator::status() const {
   return iterator_->status().ok();
@@ -176,9 +179,9 @@ bool LevelDBIterator::Refresh() {
 
 }//namespace
 
-std::unique_ptr<kvfs::Store::WriteBatch> kvfs::kvfsLevelDBStore::get_write_batch() {
+std::unique_ptr<kvfs::KVStore::WriteBatch> kvfs::kvfsLevelDBStore::GetWriteBatch() {
   return std::make_unique<LevelDBWriteBatch>(db_handle);
 }
-std::unique_ptr<kvfs::Store::Iterator> kvfs::kvfsLevelDBStore::get_iterator() {
+std::unique_ptr<kvfs::KVStore::Iterator> kvfs::kvfsLevelDBStore::GetIterator() {
   return std::make_unique<LevelDBIterator>(db_handle);
 }

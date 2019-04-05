@@ -11,6 +11,7 @@
 
 #if !defined(KVFS_VERSION)
 #define KVFS_VERSION "1.0"
+
 #endif  // !defined(KVFS_VERSION)
 #if !defined(KVFS_HAVE_ROCKSDB)
 #define KVFS_HAVE_ROCKSDB 0
@@ -25,7 +26,7 @@
 
 #if !defined(KVFS_MAX_OPEN_FILES)
 #define KVFS_MAX_OPEN_FILES 512
-#endif  // !defined(KVFS_DEF_BLOCK_SIZE)
+#endif  // !defined(KVFS_MAX_OPEN_FILES)
 
 #if !defined(KVFS_CACHE_SIZE)
 #define KVFS_CACHE_SIZE 512

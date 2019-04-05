@@ -14,112 +14,112 @@ using std::vector;
 
 namespace kvfs {
 
-RocksDBStore::RocksDBStore(const string &_db_path) : db_handle(std::make_shared<RocksHandles>(_db_path)) {}
+kvfsRocksDBStore::kvfsRocksDBStore(const std::string &_db_path) : db_handle(std::make_shared<RocksHandles>(_db_path)) {}
 
-RocksDBStore::~RocksDBStore() {
+kvfsRocksDBStore::~kvfsRocksDBStore() {
   db_handle->db.reset();
   db_handle.reset();
 };
 
-void RocksDBStore::close() {
+void kvfsRocksDBStore::Close() {
   db_handle->db.reset();
 }
 
-bool RocksDBStore::put(const std::string &key, const std::string &value) {
+bool kvfsRocksDBStore::Put(const std::string &key, const std::string &value) {
   auto status = db_handle->db->Put(rocksdb::WriteOptions(), key, value);
   return status.ok();
 }
 
-StoreResult RocksDBStore::get(const std::string &key) {
-  string value;
+KVStoreResult kvfsRocksDBStore::Get(const std::string &key) {
+  std::string value;
   auto status = db_handle->db->Get(
-      ReadOptions(), key, &value);
+      rocksdb::ReadOptions(), key, &value);
   if (!status.ok()) {
     if (status.IsNotFound()) {
       // Return an empty StoreResult
-      return StoreResult();
+      return KVStoreResult();
     }
     throw RocksException(
         status, "failed to get " + key + " from local store");
   }
-  return StoreResult(std::move(value));
+  return KVStoreResult(std::move(value));
 }
 
-bool RocksDBStore::delete_(const std::string &key) {
+bool kvfsRocksDBStore::Delete(const std::string &key) {
   auto status = db_handle->db->Delete(rocksdb::WriteOptions(), key);
   return status.ok();
 }
 
-vector<StoreResult> RocksDBStore::get_children(const std::string &key) {
+vector<KVStoreResult> kvfsRocksDBStore::GetChildren(const std::string &key) {
 
-  auto val = get(key);
+  auto val = Get(key);
   if (val.isValid()) {
-    kvfsMetaData dirValue;
+    kvfsInodeValue dirValue;
     dirValue.parse(val);
     kvfs_file_inode_t prefix = dirValue.fstat_.st_ino;
-    vector<StoreResult> result;
-    auto iter = db_handle->db->NewIterator(ReadOptions());
+    vector<KVStoreResult> result;
+    auto iter = db_handle->db->NewIterator(rocksdb::ReadOptions());
 
     for (iter->Seek(reinterpret_cast<const char *>(prefix));
          iter->Valid() && iter->key().starts_with(reinterpret_cast<const char *>(prefix));
          iter->Next()) {
       auto value = iter->value();
-      result.emplace_back(StoreResult(value.data()));
+      result.emplace_back(KVStoreResult(value.data()));
     }
 
     delete (iter);
     return result;
   }
 
-  return vector<StoreResult>();
+  return vector<KVStoreResult>();
 }
 
-StoreResult RocksDBStore::get_parent(const std::string &key) {
-  auto val = get(key);
+KVStoreResult kvfsRocksDBStore::GetParent(const std::string &key) {
+  auto val = Get(key);
 
   if (val.isValid()) {
-    kvfsMetaData dv{};
+    kvfsInodeValue dv{};
     dv.parse(val);
     auto parent = dv.parent_key_;
-    return get(parent.pack());
+    return Get(parent.pack());
   }
-  return StoreResult();
+  return KVStoreResult();
 }
 
-bool RocksDBStore::sync() {
+bool kvfsRocksDBStore::Sync() {
   rocksdb::Status status = db_handle->db->SyncWAL();
   return status.ok();
 }
 
-bool RocksDBStore::compact() {
+bool kvfsRocksDBStore::Compact() {
   auto status = db_handle->db->CompactRange(rocksdb::CompactRangeOptions(), nullptr, nullptr);
 
   return status.ok();
 }
 
-bool RocksDBStore::merge(const std::string &key, const std::string &value) {
-  if (this->get(key).isValid()) {
+bool kvfsRocksDBStore::Merge(const std::string &key, const std::string &value) {
+  if (this->Get(key).isValid()) {
     auto status = db_handle->db->Delete(rocksdb::WriteOptions(), key);
     status = db_handle->db->Put(rocksdb::WriteOptions(), key, value);
     return status.ok();
   } else {
-    return this->put(key, value);
+    return this->Put(key, value);
   }
 }
 
-bool RocksDBStore::delete_range(const std::string &start, const std::string &end) {
-  auto status = db_handle->db->DeleteRange(WriteOptions(), db_handle->db->DefaultColumnFamily(), start, end);
+bool kvfsRocksDBStore::DeleteRange(const std::string &start, const std::string &end) {
+  auto status = db_handle->db->DeleteRange(rocksdb::WriteOptions(), db_handle->db->DefaultColumnFamily(), start, end);
   return status.ok();
 }
 
 namespace {
-class RocksDBWriteBatch : public Store::WriteBatch {
+class RocksDBWriteBatch : public KVStore::WriteBatch {
  public:
-  void put(const std::string &key, const std::string &value) override;
+  void Put(const std::string &key, const std::string &value) override;
 
-  void delete_(const std::string &key) override;
+  void Delete(const std::string &key) override;
 
-  void flush() override;
+  void Flush() override;
 
   explicit RocksDBWriteBatch(std::shared_ptr<RocksHandles> db_handle);
 
@@ -127,13 +127,12 @@ class RocksDBWriteBatch : public Store::WriteBatch {
   rocksdb::WriteBatch write_batch;
 };
 
-void RocksDBWriteBatch::flush() {
+void RocksDBWriteBatch::Flush() {
   auto pending = write_batch.Count();
   if (pending == 0) {
     return;
   }
-
-  auto status = db_handle_->db->Write(WriteOptions(), &write_batch);
+  auto status = db_handle_->db->Write(rocksdb::WriteOptions(), &write_batch);
 
   if (!status.ok()) {
     throw RocksException(
@@ -144,17 +143,17 @@ void RocksDBWriteBatch::flush() {
 }
 
 RocksDBWriteBatch::RocksDBWriteBatch(const std::shared_ptr<kvfs::RocksHandles> db_handle)
-    : Store::WriteBatch(), db_handle_(db_handle), write_batch() {}
+    : KVStore::WriteBatch(), db_handle_(db_handle), write_batch() {}
 
-void RocksDBWriteBatch::put(const std::string &key, const std::string &value) {
+void RocksDBWriteBatch::Put(const std::string &key, const std::string &value) {
   write_batch.Put(key, value);
 }
 
-void RocksDBWriteBatch::delete_(const std::string &key) {
+void RocksDBWriteBatch::Delete(const std::string &key) {
   write_batch.Delete(key);
 }
 
-class RocksDBIterator : public Store::Iterator {
+class RocksDBIterator : public KVStore::Iterator {
  public:
 
   explicit RocksDBIterator(const std::shared_ptr<kvfs::RocksHandles> &db_handle);
@@ -168,7 +167,7 @@ class RocksDBIterator : public Store::Iterator {
   void Next() override;
   void Prev() override;
   std::string key() const override;
-  StoreResult value() const override;
+  KVStoreResult value() const override;
   bool status() const override;
   bool Refresh() override;
 
@@ -177,8 +176,11 @@ class RocksDBIterator : public Store::Iterator {
 };
 
 kvfs::RocksDBIterator::RocksDBIterator(const std::shared_ptr<kvfs::RocksHandles> &db_handle)
-    : Store::Iterator(),
-      iterator_(db_handle->db->NewIterator(ReadOptions())) {}
+    : KVStore::Iterator() {
+  rocksdb::ReadOptions options;
+  options.fill_cache = false;
+  iterator_.reset(db_handle->db->NewIterator(options));
+}
 bool kvfs::RocksDBIterator::Valid() const {
   return iterator_->Valid();
 }
@@ -203,8 +205,8 @@ void kvfs::RocksDBIterator::Prev() {
 std::string kvfs::RocksDBIterator::key() const {
   return iterator_->key().ToString();
 }
-StoreResult kvfs::RocksDBIterator::value() const {
-  return StoreResult(iterator_->value().ToString());
+KVStoreResult kvfs::RocksDBIterator::value() const {
+  return KVStoreResult(iterator_->value().ToString());
 }
 bool kvfs::RocksDBIterator::status() const {
   return iterator_->status().ok();
@@ -218,13 +220,13 @@ kvfs::RocksDBIterator::~RocksDBIterator() {
 
 }//namespace
 
-std::unique_ptr<Store::WriteBatch> RocksDBStore::get_write_batch() {
+std::unique_ptr<KVStore::WriteBatch> kvfsRocksDBStore::GetWriteBatch() {
   return std::make_unique<RocksDBWriteBatch>(db_handle);
 }
-std::unique_ptr<Store::Iterator> RocksDBStore::get_iterator() {
+std::unique_ptr<KVStore::Iterator> kvfsRocksDBStore::GetIterator() {
   return std::make_unique<RocksDBIterator>(db_handle);
 }
-bool RocksDBStore::destroy() {
+bool kvfsRocksDBStore::Destroy() {
   rocksdb::DestroyDB(this->db_handle->db->GetName(), db_handle->db->GetOptions());
   return true;
 }

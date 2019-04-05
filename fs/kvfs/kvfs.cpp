@@ -14,13 +14,13 @@ namespace kvfs {
 kvfs::KVFS::KVFS(const std::string &mount_path)
     : root_path(mount_path),
 #if KVFS_HAVE_ROCKSDB
-    store_(std::make_shared<RocksDBStore>(mount_path)),
+    store_(std::make_shared<kvfsRocksDBStore>(mount_path)),
 #endif
 #if KVFS_HAVE_LEVELDB
       store_(std::make_shared<kvfsLevelDBStore>(mount_path)),
 #endif
 //      inode_cache_(std::make_unique<InodeCache>(KVFS_MAX_OPEN_FILES, store_)),
-      open_fds_(std::make_unique<DentryCache>(512)),
+      open_fds_(std::make_unique<OpenFilesCache>(KVFS_MAX_OPEN_FILES)),
       cwd_name_(""),
       pwd_("/"),
       errorno_(0),
@@ -36,13 +36,13 @@ kvfs::KVFS::KVFS(const std::string &mount_path)
 kvfs::KVFS::KVFS()
     : root_path("/tmp/db/"),
 #if KVFS_HAVE_ROCKSDB
-    store_(std::make_shared<RocksDBStore>(root_path)),
+    store_(std::make_shared<kvfsRocksDBStore>(root_path)),
 #endif
 #if KVFS_HAVE_LEVELDB
       store_(std::make_shared<kvfsLevelDBStore>(root_path)),
 #endif
-//      inode_cache_(std::make_unique<InodeCache>(512, store_)),
-      open_fds_(std::make_unique<DentryCache>(512)),
+//      inode_cache_(std::make_unique<InodeCache>(KVFS_MAX_OPEN_FILES, store_)),
+      open_fds_(std::make_unique<OpenFilesCache>(KVFS_MAX_OPEN_FILES)),
       cwd_name_(""),
       pwd_("/"),
       errorno_(0),
@@ -70,34 +70,39 @@ char *kvfs::KVFS::GetCWD(char *buffer, size_t size) {
     errorno_ = -EINVAL;
     std::string msg = "The size argument is zero and buffer is not a null pointer.";
     throw FSError(FSErrorType::FS_EINVAL, msg);
-  };
-
-  if (cwd_name_.string().size() > size) {
+  }
+  std::string str = pwd_.string();
+  if (str.size() > size) {
     errorno_ = -ERANGE;
     std::string msg = "The size argument is less than the length of the working directory name.\n"
                       "You need to allocate a bigger array and try again.";
     throw FSError(FSErrorType::FS_ERANGE, msg);
   }
 
-  // TODO: EACCESS not implemented!
-
   if (buffer != nullptr) {
-    memcpy(buffer, cwd_name_.string().data(), cwd_name_.string().size());
-    return nullptr;
+    memcpy(buffer, str.data(), str.size());
+    return buffer;
   }
 
-  return pwd_.string().data();
+  // unspecified behaviour
+  return buffer;
 }
-char *kvfs::KVFS::GetCurrentDirName() {
-  std::string val_from_pwd = pwd_.filename();
-  if (val_from_pwd != cwd_name_) {
-    return val_from_pwd.data();
-  }
-  return pwd_.string().data();
+
+std::string kvfs::KVFS::GetCurrentDirName() {
+  return pwd_;
 }
+
 int kvfs::KVFS::ChDir(const char *path) {
   std::filesystem::path orig_ = std::filesystem::path(path);
+  if (orig_ == "..") {
+    pwd_ = pwd_.parent_path();
+    return 0;
+  }
+  if (orig_ == ".") {
+    return 0;
+  }
   CheckNameLength(orig_);
+
   if (orig_.is_relative()) {
     // make it absolute
     std::filesystem::path prv_ = pwd_;
@@ -112,7 +117,10 @@ int kvfs::KVFS::ChDir(const char *path) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
+  std::filesystem::path input = orig_.parent_path();
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved = RealPath(input);
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
   kvfs_file_hash_t hash;
   if (orig_ != "/") {
     hash = std::filesystem::hash_value(orig_.filename());
@@ -121,32 +129,26 @@ int kvfs::KVFS::ChDir(const char *path) {
   }
 
   // retrieve the filename from store, if it doesn't exist then error
-  kvfsDirKey key_ = {resolved.second.second.fstat_.st_ino, hash};
+  kvfsInodeKey key_ = {resolved.second.second.fstat_.st_ino, hash};
   std::string key_str = key_.pack();
   std::string value_str;
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
   if (sr.isValid()) {
     // found the file, check if it is a directory
-    kvfsMetaData md_;
+    kvfsInodeValue md_;
     md_.parse(sr);
     if (S_ISLNK(md_.fstat_.st_mode)) {
-      // it is symbolic link get the real metadata
-#if KVFS_THREAD_SAFE
-      mutex_->lock();
-#endif
-      StoreResult sr = store_->get(key_str);
-#if KVFS_THREAD_SAFE
-      mutex_->unlock();
-#endif
-      if (sr.isValid()) {
-        md_.parse(sr);
-      }
+      // it is symbolic link get the symlink contents
+      const std::filesystem::path &sym_link_contents_path = GetSymLinkContentsPath(md_);
+      cwd_name_ = sym_link_contents_path.filename();
+      pwd_ = sym_link_contents_path;
+      return 0;
     }
     if (!S_ISDIR(md_.fstat_.st_mode)) {
       errorno_ = -ENOTDIR;
@@ -158,8 +160,9 @@ int kvfs::KVFS::ChDir(const char *path) {
 #endif
     current_md_ = md_;
     current_key_ = key_;
-    cwd_name_ = resolved.first.filename();
-    pwd_ = resolved.first;
+    cwd_name_ = orig_.filename();
+    pwd_ = orig_;
+
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
@@ -185,7 +188,10 @@ kvfsDIR *KVFS::OpenDir(const char *path) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_);
+  std::filesystem::path input = orig_.parent_path();
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved = RealPath(input);
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
 
 #if KVFS_THREAD_SAFE
   // lock
@@ -198,12 +204,13 @@ kvfsDIR *KVFS::OpenDir(const char *path) {
   } else {
     hash = std::filesystem::hash_value(orig_);
   }
-
-  kvfsDirKey key = {resolved.second.first.inode_, hash};
+  // if it is root, then inode number is 0
+  kvfs_file_inode_t inode_number = (orig_ == "/") ? 0 : resolved.second.second.fstat_.st_ino;
+  kvfsInodeKey key = {inode_number, hash};
   std::string key_str = key.pack();
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
   if (sr.isValid()) {
-    kvfsMetaData md_;
+    kvfsInodeValue md_;
     md_.parse(sr);
 
     // check if it is a directory
@@ -218,8 +225,7 @@ kvfsDIR *KVFS::OpenDir(const char *path) {
     kvfsFileHandle fh_ = kvfsFileHandle();
     fh_.md_ = md_;
     fh_.key_ = key;
-
-    open_fds_->insert(fd_, fh_);
+    open_fds_->Insert(fd_, fh_);
 
 #if KVFS_THREAD_SAFE
     //unlock
@@ -228,8 +234,8 @@ kvfsDIR *KVFS::OpenDir(const char *path) {
     //success
     kvfsDIR *result = new kvfsDIR();
     result->file_descriptor_ = fd_;
-    result->ptr_ = store_->get_iterator();
-    kvfsDirKey seek_key = {md_.fstat_.st_ino, 0};
+    result->ptr_ = store_->GetIterator();
+    kvfsInodeKey seek_key = {md_.fstat_.st_ino, 0};
     key_str = seek_key.pack();
     result->ptr_->Seek(key_str);
     return result;
@@ -261,9 +267,10 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
     }
   }
 
-  // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_.parent_path());
-
+  // Attempt to resolve the real path from given path
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved = RealPath(orig_.parent_path());
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
   // now the path components all exist and resolved
   if ((flags & O_ACCMODE) == O_RDONLY || (flags & O_ACCMODE) == O_WRONLY || (flags & O_ACCMODE) == O_RDWR) {
   } else {
@@ -276,7 +283,7 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
   } else {
     hash = std::filesystem::hash_value(orig_);
   }
-  kvfsDirKey key = {resolved.second.first.inode_, hash};
+  kvfsInodeKey key = {resolved.second.second.fstat_.st_ino, hash};
   std::string key_str = key.pack();
   std::string value_str;
   if (flags & O_CREAT) {
@@ -284,7 +291,7 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    StoreResult sr = store_->get(key_str);
+    KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
@@ -296,30 +303,25 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
         errorno_ = -EEXIST;
         throw FSError(FSErrorType::FS_EEXIST, "Flags O_CREAT and O_EXCL are set but the file already exists");
       }
-      kvfsMetaData md_ = kvfsMetaData();
+      kvfsInodeValue md_ = kvfsInodeValue();
       md_.parse(sr);
       kvfsFileHandle fh_ = kvfsFileHandle(key, md_, flags);
-      uint32_t fd_ = next_free_fd_;
-      ++next_free_fd_;
+      uint32_t fd_ = GetFreeFD();
       // add it to open_fds
-      open_fds_->insert(fd_, fh_);
+      open_fds_->Insert(fd_, fh_);
       return fd_;
     }
 
     // create a new file
     // check if there is room for more open files
-    if (next_free_fd_ == KVFS_MAX_OPEN_FILES) {
-      errorno_ = -ENOSPC;
-      throw FSError(FSErrorType::FS_ENOSPC, "Failed to open due to no more available file descriptors");
-    }
+    uint32_t fd_ = GetFreeFD();
     // file doesn't exist so create new one
     std::filesystem::path name = orig_.filename().string();
-    kvfsMetaData md_ = kvfsMetaData(name, GetFreeInode(), mode, resolved.second.first);
+    kvfsInodeValue md_ = kvfsInodeValue(name, GetFreeInode(), mode, key);
 
     // generate a file descriptor
     kvfsFileHandle fh_ = kvfsFileHandle(key, md_, flags);
-    uint32_t fd_ = next_free_fd_;
-    ++next_free_fd_;
+
 
     // insert into store
     value_str = md_.pack();
@@ -327,17 +329,17 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
     // Acquire lock
           mutex_->lock();
 #endif
-    store_->put(key_str, value_str);
+    store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
     // release lock
     mutex_->unlock();
 #endif
     // write it back if flag O_SYNC
     if (flags & O_SYNC) {
-      store_->sync();
+      store_->Sync();
     }
     // add it to open_fds
-    open_fds_->insert(fd_, fh_);
+    open_fds_->Insert(fd_, fh_);
 
     // update the parent
     ++resolved.second.second.fstat_.st_nlink;
@@ -348,7 +350,7 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
     // Acquire lock
     mutex_->lock();
 #endif
-    store_->merge(key_str, value_str);
+    store_->Merge(key_str, value_str);
 #if KVFS_THREAD_SAFE
     // release lock
     mutex_->unlock();
@@ -361,7 +363,7 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
   // Acquire lock
   mutex_->lock();
 #endif
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   // release lock
   mutex_->unlock();
@@ -370,13 +372,12 @@ int kvfs::KVFS::Open(const char *filename, int flags, mode_t mode) {
     errorno_ = -EIO;
     return errorno_;
   }
-  kvfsMetaData md_ = kvfsMetaData();
+  kvfsInodeValue md_ = kvfsInodeValue();
   md_.parse(sr);
   kvfsFileHandle fh_ = kvfsFileHandle(key, md_, flags);
-  uint32_t fd_ = next_free_fd_;
-  ++next_free_fd_;
+  uint32_t fd_ = GetFreeFD();
   // add it to open_fds
-  open_fds_->insert(fd_, fh_);
+  open_fds_->Insert(fd_, fh_);
   return fd_;
 }
 
@@ -385,7 +386,7 @@ void kvfs::KVFS::FSInit() {
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    StoreResult sb = store_->get("superblock");
+    const KVStoreResult &sb = store_->Get("superblock");
     if (sb.isValid()) {
       super_block_.parse(sb);
       super_block_.fs_number_of_mounts_++;
@@ -394,23 +395,22 @@ void kvfs::KVFS::FSInit() {
       super_block_.fs_creation_time_ = time_now;
       super_block_.fs_last_mount_time_ = time_now;
       super_block_.fs_number_of_mounts_ = 1;
-      super_block_.total_block_count_ = 0;
-      super_block_.total_inode_count_ = 1;
-      super_block_.next_free_inode_ = 1;
+      super_block_.total_inode_count_ = 2;
+      super_block_.next_free_inode_ = 2;
       std::string value_str = super_block_.pack();
-      bool status = store_->put("superblock", value_str);
+      bool status = store_->Put("superblock", value_str);
       if (!status) {
-        throw FSError(FSErrorType::FS_EIO, "Failed to IO with store");
+        throw FSError(FSErrorType::FS_EIO, "Failed to put superblock in store");
       }
     }
-    kvfsDirKey root_key = {0, std::filesystem::hash_value("/")};
+    kvfsInodeKey root_key = {0, std::filesystem::hash_value("/")};
     std::string key_str = root_key.pack();
     std::string value_str;
-    if (!store_->get(root_key.pack()).isValid()) {
+    if (!store_->Get(root_key.pack()).isValid()) {
       mode_t mode = geteuid() | getegid() | S_IFDIR;
-      kvfsMetaData root_md = kvfsMetaData("/", 0, mode, root_key);
+      kvfsInodeValue root_md = kvfsInodeValue("/", 1, mode, root_key);
       value_str = root_md.pack();
-      store_->put(key_str, value_str);
+      store_->Put(key_str, value_str);
     }
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
@@ -433,13 +433,15 @@ bool kvfs::KVFS::CheckNameLength(const std::filesystem::path &path) {
 }
 
 std::pair<std::filesystem::path,
-          std::pair<kvfsDirKey, kvfsMetaData>> kvfs::KVFS::ResolvePath(const std::filesystem::path &input) {
+          std::pair<kvfsInodeKey, kvfsInodeValue>> kvfs::KVFS::ResolvePath(const std::filesystem::path &input) {
   std::filesystem::path output;
   kvfs_file_inode_t inode = 0;
-  kvfsDirKey parent_key_;
-  kvfsMetaData parent_md_;
+  kvfsInodeKey prv_k;
+  kvfsInodeValue prv_v;
+  kvfsInodeKey parent_key_;
+  kvfsInodeValue parent_md_;
   std::string key_str;
-  kvfsMetaData md_;
+  kvfsInodeValue md_;
   // Assume the path is absolute
   for (const std::filesystem::path &e : input) {
     if (e == ".") {
@@ -447,23 +449,26 @@ std::pair<std::filesystem::path,
     }
     if (e == "..") {
       output = output.parent_path();
+      if (input.filename() == "..") {
+        parent_key_ = prv_k;
+        parent_md_ = prv_v;
+        break;
+      }
       continue;
     }
-
     // check if name is not too long
     if (!CheckNameLength(e)) {
       errorno_ = -ENAMETOOLONG;
       throw FSError(FSErrorType::FS_ENAMETOOLONG, "File name is longer than POSIX NAME_MAX");
     }
-
     // Request the metadata from store
     {
 #if KVFS_THREAD_SAFE
       mutex_->lock();
 #endif
-      kvfsDirKey key = {inode, std::filesystem::hash_value(e)};
+      kvfsInodeKey key = {inode, std::filesystem::hash_value(e)};
       key_str = key.pack();
-      StoreResult sr = store_->get(key_str);
+      KVStoreResult sr = store_->Get(key_str);
       if (sr.isValid()) {
         // found the key in store
         md_.parse(sr);
@@ -475,19 +480,20 @@ std::pair<std::filesystem::path,
           mutex_->unlock();
 #endif
           output = GetSymLinkContentsPath(md_);
+          prv_k = parent_key_;
           parent_key_ = md_.real_key_;
         } else {
+          prv_k = parent_key_;
           parent_key_ = key;
         }
         // update inode to this file's inode
         inode = md_.fstat_.st_ino;
+        prv_v = parent_md_;
         parent_md_ = md_;
       } else {
         // the path component must exists
-        // otherwise we are at the end and we just append the filename
-        // file name will be checked in the calling function
         errorno_ = -ENONET;
-        std::string msg = e.string() + " No such file or directory found.";
+        std::string msg = e.string() + " No such file or directory found under inode: #" + std::to_string(inode);
         throw FSError(FSErrorType::FS_ENOENT, msg);
       }
 #if KVFS_THREAD_SAFE
@@ -499,120 +505,79 @@ std::pair<std::filesystem::path,
   }
   return std::pair(output, std::pair(parent_key_, parent_md_));
 }
-std::filesystem::path kvfs::KVFS::GetSymLinkContentsPath(const kvfs::kvfsMetaData &data) {
+std::filesystem::path kvfs::KVFS::GetSymLinkContentsPath(const kvfs::kvfsInodeValue &data) {
   std::filesystem::path output;
   std::list<std::filesystem::path> path_list;
   kvfsBlockKey blck_key = {data.fstat_.st_ino, 0};
   errorno_ = 0;
   // read contents of the symlink block and convert it to a path
   void *buffer = malloc(static_cast<size_t>(data.fstat_.st_size));
-  size_t blcks_to_read = static_cast<size_t>(data.last_block_key_.block_number_);
-  ssize_t read = ReadBlocks(blck_key, blcks_to_read, static_cast<size_t>(data.fstat_.st_size), 0, buffer);
+  size_t blcks_to_read = data.fstat_.st_size / KVFS_DEF_BLOCK_SIZE
+      + ((data.fstat_.st_size % KVFS_DEF_BLOCK_SIZE) ? 1 : 0);
+  ssize_t read = ReadBlocks(blck_key, blcks_to_read, static_cast<size_t>(data.fstat_.st_size), buffer);
   output = (char *) buffer;
   free(buffer);
   return output;
 }
-bool kvfs::KVFS::starts_with(const std::string &s1, const std::string &s2) {
-  return s2.size() <= s1.size() && s1.compare(0, s2.size(), s2) == 0;
-}
-kvfs_file_inode_t kvfs::KVFS::GetFreeInode() {
-  kvfs_file_inode_t fi = super_block_.next_free_inode_;
-  ++super_block_.next_free_inode_;
-  ++super_block_.total_inode_count_;
-  return fi;
-}
-bool kvfs::KVFS::FreeUpBlock(const kvfsBlockKey &key) {
-  // check if freeblock key exists in store, loop through freeblocks
-  // until we find the last freeblock key, store this key in there.
-  // check free blocks count
-  // divide by 512 if bigger than 512
-  // generate key for freeblocks
+bool kvfs::KVFS::FreeUpInodeNumber(const kvfs_file_inode_t &inode) {
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
   std::string key_str;
   std::string value_str;
-  if (super_block_.freeblocks_count_ < 512) {
-    // add it to first freeblocks block
-    kvfsFreeBlocksKey fb_key = {"fb", 0};
-    key_str = fb_key.pack();
-    StoreResult sr = store_->get(key_str);
-    if (sr.isValid()) {
-      kvfsFreeBlocksValue value{};
-      value.parse(sr);
-      value.blocks[value.count_] = key;
-      ++value.count_;
-      // merge it in store
-      value_str = value.pack();
-      bool status = store_->merge(key_str, value_str);
-      if (!status) {
-        throw FSError(FSErrorType::FS_EIO, "Failed to perform IO in the store");
-      }
-      if (value.count_ == 512) {
-        // generate next fb_block
-        ++fb_key.number_;
-        kvfsFreeBlocksValue fb_value{};
-        key_str = fb_key.pack();
-        value_str = fb_value.pack();
-        status = store_->put(key_str, value_str);
-        if (!status) {
-          throw FSError(FSErrorType::FS_EIO, "Failed to perform IO in the store");
-        }
-      }
-    } else {
-      // generate the first fb block
-      kvfsFreeBlocksValue value{};
-      value.count_ = 1;
-      ++super_block_.freeblocks_count_;
-      value.blocks[0] = key;
-      // put in store
-      key_str = fb_key.pack();
-      value_str = value.pack();
-      bool status = store_->put(key_str, value_str);
-      if (!status) {
-        throw FSError(FSErrorType::FS_EIO, "Failed to perform IO in the store");
-      }
-      return status;
-    }
-  } else {
-    // fb count is >= 512
-    uint64_t number = super_block_.freeblocks_count_ / 512;
-    kvfsFreeBlocksKey fb_key = {"fb", number};
-    kvfsFreeBlocksValue fb_value{};
-    fb_value.blocks[fb_value.count_] = key;
-    ++fb_value.count_;
-    ++super_block_.freeblocks_count_;
-    key_str = fb_key.pack();
-    value_str = fb_value.pack();
-    bool status = store_->merge(key_str, value_str);
-    if (!status) {
-      throw FSError(FSErrorType::FS_EIO, "Failed to perform IO in the store");
-    }
-    if (fb_value.count_ == 512) {
-      // generate next fb_block
-      ++fb_key.number_;
-      kvfsFreeBlocksValue fb_value{};
-      key_str = fb_key.pack();
-      value_str = fb_value.pack();
-      status = store_->put(key_str, value_str);
-      if (!status) {
-        throw FSError(FSErrorType::FS_EIO, "Failed to perform IO in the store");
-      }
-    }
-  }
+
+  uint64_t free_inodes_key_number = super_block_.freed_inodes_count_ / 512;
+  free_inodes_key_number += (super_block_.freed_inodes_count_ % 512) ? 1 : 0;
+  kvfsFreedInodesKey fi_key = {"freeinodes", free_inodes_key_number};
+  key_str = fi_key.pack();
+#if KVFS_THREAD_SAFE
+  mutex_->lock();
+#endif
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
-  return true;
+  if (sr.isValid()) {
+    kvfsFreedInodesValue fi_v;
+    fi_v.parse(sr);
+    ++fi_v.count_;
+    fi_v.inodes[super_block_.freed_inodes_count_ % 512] = inode;
+    value_str = fi_v.pack();
+#if KVFS_THREAD_SAFE
+    mutex_->lock();
+#endif
+    bool status = store_->Put(key_str, value_str);
+#if KVFS_THREAD_SAFE
+    mutex_->unlock();
+#endif
+    ++super_block_.freed_inodes_count_;
+    --super_block_.total_inode_count_;
+    return status;
+  } else {
+    kvfsFreedInodesValue fi_v;
+    ++fi_v.count_;
+    fi_v.inodes[super_block_.freed_inodes_count_ % 512] = inode;
+    value_str = fi_v.pack();
+#if KVFS_THREAD_SAFE
+    mutex_->lock();
+#endif
+    bool status = store_->Put(key_str, value_str);
+#if KVFS_THREAD_SAFE
+    mutex_->unlock();
+#endif
+    ++super_block_.freed_inodes_count_;
+    --super_block_.total_inode_count_;
+    return status;
+  }
 }
 ssize_t kvfs::KVFS::Read(int filedes, void *buffer, size_t size) {
   // read from offset in the file descriptor
   // if offset is at eof then return 0 else try to pread with filedes offset
   kvfsFileHandle fh_;
-  bool status = open_fds_->find(filedes, fh_);
+  bool status = open_fds_->Find(filedes, fh_);
   if (!status) {
     errorno_ = -EBADFD;
-    throw FSError(FSErrorType::FS_EBADF, "The file descriptor doesn't name a opened file, invalid fd");
+    throw FSError(FSErrorType::FS_EBADFD, "The file descriptor doesn't name a opened file, invalid fd");
   }
 
   // check flags first
@@ -628,7 +593,7 @@ ssize_t kvfs::KVFS::Read(int filedes, void *buffer, size_t size) {
       // update accesstimes on the file
       fh_.md_.fstat_.st_atim.tv_sec = time_now;
     }
-    open_fds_->insert(filedes, fh_);
+    open_fds_->Insert(filedes, fh_);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
@@ -638,17 +603,17 @@ ssize_t kvfs::KVFS::Read(int filedes, void *buffer, size_t size) {
     // then modify filedes offset by amount read
     ssize_t read = PRead(filedes, buffer, size, fh_.offset_);
     fh_.offset_ += read;
-    open_fds_->insert(filedes, fh_);
+    open_fds_->Insert(filedes, fh_);
     return read;
   }
 }
 ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
   kvfsFileHandle fh_;
-  bool status = open_fds_->find(filedes, fh_);
+  bool status = open_fds_->Find(filedes, fh_);
   ssize_t written = 0;
   if (!status) {
     errorno_ = -EBADFD;
-    throw FSError(FSErrorType::FS_EBADF, "The file descriptor doesn't name a opened file, invalid fd");
+    throw FSError(FSErrorType::FS_EBADFD, "The file descriptor doesn't name a opened file, invalid fd");
   }
   // check flags first
 
@@ -667,7 +632,7 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
     const void *idx = buffer;
     std::string key_str = blck_key_.pack();
     std::string value_str;
-    StoreResult sr = store_->get(key_str);
+    KVStoreResult sr = store_->Get(key_str);
     if (sr.isValid()) {
       kvfsBlockValue bv_;
       bv_.parse(sr);
@@ -678,7 +643,7 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
       mutex_->lock();
 #endif
       value_str = bv_.pack();
-      store_->put(key_str, value_str);
+      store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
       mutex_->unlock();
 #endif
@@ -688,20 +653,19 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
     size_t size_left = size - written;
     size_t blocks_to_write_ = (size_left) / KVFS_DEF_BLOCK_SIZE;
     blocks_to_write_ += ((size_left % KVFS_DEF_BLOCK_SIZE) > 0) ? 1 : 0;
-    std::pair<ssize_t, kvfs::kvfsBlockKey> result =
-        WriteBlocks(blck_key_, blocks_to_write_, idx, size_left, 0);
-    written += result.first;
+    ssize_t result =
+        WriteBlocks(blck_key_, blocks_to_write_, idx, size_left);
+    written += result;
 
     // update stats
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    fh_.md_.last_block_key_ = result.second;
     fh_.md_.fstat_.st_size += written;
     fh_.offset_ += written;
     fh_.md_.fstat_.st_mtim.tv_sec = time_now;
     // update this filedes in cache
-    open_fds_->insert(filedes, fh_);
+    open_fds_->Insert(filedes, fh_);
     // finished
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
@@ -711,70 +675,50 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
     // call to PWrite to write from offset
     written = PWrite(filedes, buffer, size, fh_.offset_);
     fh_.offset_ += written;
-    open_fds_->insert(filedes, fh_);
+    open_fds_->Insert(filedes, fh_);
     return written;
   }
 }
-kvfs::kvfsBlockKey kvfs::KVFS::GetFreeBlock() {
-  // search free block first
+kvfs_file_inode_t kvfs::KVFS::GetFreeInode() {
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
   std::string key_str;
   std::string value_str;
-  if (super_block_.freeblocks_count_ != 0) {
-    size_t fb_number = super_block_.freeblocks_count_ / 512;
-    kvfsFreeBlocksKey fb_key = {"fb", fb_number};
-    key_str = fb_key.pack();
-    StoreResult sr = store_->get(key_str);
+  kvfs_file_inode_t result;
+  if (super_block_.freed_inodes_count_ > 0) {
+    uint64_t free_inodes_key_number = super_block_.freed_inodes_count_ / 512;
+    kvfsFreedInodesKey fi_key = {"freeinodes", free_inodes_key_number};
+    key_str = fi_key.pack();
+#if KVFS_THREAD_SAFE
+    mutex_->lock();
+#endif
+    KVStoreResult sr = store_->Get(key_str);
+#if KVFS_THREAD_SAFE
+    mutex_->unlock();
+#endif
     if (sr.isValid()) {
-      kvfsFreeBlocksValue val{};
-      val.parse(sr);
-      kvfsBlockKey key = val.blocks[val.count_ - 1];
-
-      // check if the block refers to another block
-      kvfsBlockValue bv_{};
-      kvfsBlockKey in_key_ = key;
-      key_str = in_key_.pack();
-      sr = store_->get(key_str);
-      if (sr.isValid()) {
-        bv_.parse(sr);
-        if (bv_.next_block_.block_number_ != 0) {
-          in_key_ = bv_.next_block_;
-        }
-      }
-
-      if (in_key_.block_number_ == key.block_number_) {
-        // the block is solo
-        // mark it zero
-        val.blocks[val.count_ - 1] = kvfsBlockKey();
-      } else {
-        // the block referred to another block
-        // delete it from array
-        val.blocks[val.count_ - 1] = in_key_;
-      }
-      --val.count_;
-      if (val.count_ == 0) {
-        // its an empty array now, delete it from store
-        key_str = fb_key.pack();
-        store_->delete_(key_str);
-      }
-      --super_block_.freeblocks_count_;
-      // unlock
+      kvfsFreedInodesValue fi_v;
+      fi_v.parse(sr);
+      result = fi_v.inodes[fi_v.count_];
+      --fi_v.count_;
+      value_str = fi_v.pack();
+#if KVFS_THREAD_SAFE
+      mutex_->lock();
+#endif
+      bool status = store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
       mutex_->unlock();
 #endif
-      return key;
+      --super_block_.freed_inodes_count_;
+      ++super_block_.total_inode_count_;
+      return result;
     }
   }
-  // get a free block from superblock
-  kvfsBlockKey bk_;
-  ++super_block_.next_free_block_number;
-  ++super_block_.total_block_count_;
-#if KVFS_THREAD_SAFE
-  mutex_->unlock();
-#endif
-  return bk_;
+  result = super_block_.next_free_inode_;
+  ++super_block_.next_free_inode_;
+  ++super_block_.total_inode_count_;
+  return result;
 }
 int KVFS::Close(int filedes) {
   // check filedes exists
@@ -783,50 +727,20 @@ int KVFS::Close(int filedes) {
 #if KVFS_THREAD_SAFE
     mutex_->lock(); // lock
 #endif
-    bool status = open_fds_->find(filedes, fh_);
+    bool status = open_fds_->Find(filedes, fh_);
     if (!status) {
       errorno_ = -EBADFD;
-      return errorno_;
+      throw FSError(FSErrorType::FS_EBADFD, "The given file des does not match any open files");
     }
-    // update store
-    // check if file exists in the store
-    // if file is in store, check it's mtime
-    // if it matches this file des then update it otherwise just evict this file des
-    // if it doesn't exist then assume it is a new file
+    // Close just update the store anyways, and its upto the caller
+    //  to correctly call close on deleted files.
+
     std::string key_str = fh_.key_.pack();
-    StoreResult sr = store_->get(key_str);
-    if (sr.isValid()) {
-      kvfsMetaData check_md_;
-      check_md_.parse(sr);
-      if (check_md_.fstat_.st_mtim.tv_sec > fh_.md_.fstat_.st_mtim.tv_sec) {
-        // file was updated in another file des recently
-        // evict only
-        open_fds_->evict(filedes);
-#if KVFS_THREAD_SAFE
-        mutex_->unlock(); // unlock
-#endif
-        return 0;
-      }
-    }
-
     std::string value_str = fh_.md_.pack();
-    if (fh_.flags_ & O_CREAT) {
-      // check flags and see if it was opened with O_CREAT
-      // file is new or updated
-      store_->merge(key_str, value_str);
-      store_->sync();
-      // release it from open_fds
-      open_fds_->evict(filedes);
-      // success
-#if KVFS_THREAD_SAFE
-      mutex_->unlock(); //unlock
-#endif
-      return 0;
-    }
-
-    // file is neither new or exists in store anymore
-    // so just evict and return
-    open_fds_->evict(filedes);
+    store_->Merge(key_str, value_str);
+    // release it from open_fds
+    open_fds_->Evict(filedes);
+    FreeUpFD(filedes);
     // success
 #if KVFS_THREAD_SAFE
     mutex_->unlock(); //unlock
@@ -848,9 +762,9 @@ kvfs_dirent *KVFS::ReadDir(kvfsDIR *dirstream) {
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  if (!open_fds_->find(dirstream->file_descriptor_, fh_)) {
+  if (!open_fds_->Find(dirstream->file_descriptor_, fh_)) {
     errorno_ = -EBADFD;
-    throw FSError(FSErrorType::FS_EBADF, "The dirp argument does not refer to an open directory stream.");
+    throw FSError(FSErrorType::FS_EBADFD, "The dirp argument does not refer to an open directory stream.");
   }
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
@@ -861,14 +775,14 @@ kvfs_dirent *KVFS::ReadDir(kvfsDIR *dirstream) {
 #endif
     if (dirstream->ptr_->Valid()) {
       dirstream->ptr_->Next();
-      if (dirstream->ptr_->key().size() == sizeof(kvfsDirKey)
-          && dirstream->ptr_->value().asString().size() == sizeof(kvfsMetaData)) {
-        kvfsDirKey key;
+      if (dirstream->ptr_->key().size() == sizeof(kvfsInodeKey)
+          && dirstream->ptr_->value().asString().size() == sizeof(kvfsInodeValue)) {
+        kvfsInodeKey key;
         key.parse(dirstream->ptr_->key());
-        kvfsMetaData md_;
+        kvfsInodeValue md_;
         md_.parse(dirstream->ptr_->value());
 
-        if (key.inode_ == fh_.md_.fstat_.st_ino) {
+        if (key.inode_ == fh_.md_.dirent_.d_ino) {
           kvfs_dirent *result = new kvfs_dirent();
           *result = md_.dirent_;
 #if KVFS_THREAD_SAFE
@@ -900,35 +814,18 @@ int KVFS::CloseDir(kvfsDIR *dirstream) {
     throw FSError(FSErrorType::FS_EINVAL, "The dirp argument is a nullptr");
   }
 
-  if (!open_fds_->find(dirstream->file_descriptor_, fh_)) {
+  if (!open_fds_->Find(dirstream->file_descriptor_, fh_)) {
     errorno_ = -EBADFD;
-    throw FSError(FSErrorType::FS_EBADF, "The dirp argument does not refer to an open directory stream.");
+    throw FSError(FSErrorType::FS_EBADFD, "The dirp argument does not refer to an open directory stream.");
   }
   try {
+    // CloseDir update the file in store, and delete the dirstream
     std::string key_str = fh_.key_.pack();
-    StoreResult sr = store_->get(key_str);
-    if (sr.isValid()) {
-      kvfsMetaData check_md_;
-      check_md_.parse(sr);
-      if (check_md_.fstat_.st_mtim.tv_sec > fh_.md_.fstat_.st_mtim.tv_sec) {
-        // file was updated in another file des recently
-        // evict only
-        open_fds_->evict(dirstream->file_descriptor_);
-        dirstream->ptr_.reset();
-        delete dirstream;
-#if KVFS_THREAD_SAFE
-        mutex_->unlock();
-#endif
-        return 0;
-      }
-    }
     std::string value_str = fh_.md_.pack();
     // file is new or updated
-    store_->merge(key_str, value_str);
-    store_->sync();
-
+    store_->Merge(key_str, value_str);
     // release it from open_fds
-    open_fds_->evict(dirstream->file_descriptor_);
+    open_fds_->Evict(dirstream->file_descriptor_);
     dirstream->ptr_.reset();
     delete dirstream;
 
@@ -978,8 +875,17 @@ int KVFS::Link(const char *oldname, const char *newname) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved_old = RealPath(orig_old.parent_path());
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved_new = RealPath(orig_new.parent_path());
+  std::filesystem::path input = orig_old.parent_path();
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved_old =
+      RealPath(input);
+  resolved_old.first.append(orig_old.filename().string());
+  orig_old = resolved_old.first.lexically_normal();
+
+  input = orig_new.parent_path();
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved_new =
+      RealPath(input);
+  resolved_new.first.append(orig_new.filename().string());
+  orig_new = resolved_new.first.lexically_normal();
 
   // create a new link (directory entry) for the existing file
 
@@ -992,13 +898,13 @@ int KVFS::Link(const char *oldname, const char *newname) {
     old_hash = std::filesystem::hash_value(orig_old);
   }
 
-  kvfsDirKey
+  kvfsInodeKey
       old_key = {resolved_old.second.second.fstat_.st_ino, old_hash};
   key_str = old_key.pack();
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1007,7 +913,7 @@ int KVFS::Link(const char *oldname, const char *newname) {
     throw FSError(FSErrorType::FS_ENOENT, "A component of either path prefix does not exist; "
                                           "the file named by path1 does not exist; or path1 or path2 points to an empty string.");
   }
-  kvfsMetaData old_md_;
+  kvfsInodeValue old_md_;
   old_md_.parse(sr);
   kvfs_file_hash_t new_hash;
   if (orig_new != "/") {
@@ -1015,18 +921,21 @@ int KVFS::Link(const char *oldname, const char *newname) {
   } else {
     new_hash = std::filesystem::hash_value(orig_new);
   }
-  kvfsDirKey
+  kvfsInodeKey
       new_key = {resolved_new.second.second.fstat_.st_ino, new_hash};
   // set the inode of this new link to the inode of the original file
-  kvfsMetaData new_md_ = kvfsMetaData(resolved_new.first.filename(), old_md_.fstat_.st_ino,
-                                      resolved_new.second.second.fstat_.st_mode, resolved_new.second.first);
+  kvfsInodeValue new_md_ = kvfsInodeValue((orig_new == "/" ? orig_new : orig_new.filename()),
+                                          old_md_.fstat_.st_ino,
+                                          resolved_new.second.second.fstat_.st_mode,
+                                          old_key);
+  new_md_.dirent_.d_ino = GetFreeInode(); // setup a unique inode for this entry
   if (old_md_.real_key_ != old_key) {
     // check if original exists, if it doesn't exist then make the old one original
     key_str = old_md_.real_key_.pack();
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    StoreResult sr = store_->get(key_str);
+    KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
@@ -1034,14 +943,14 @@ int KVFS::Link(const char *oldname, const char *newname) {
       old_md_.real_key_ = old_key;
       --old_md_.fstat_.st_nlink;
     } else {
-      kvfsMetaData original_md_;
+      kvfsInodeValue original_md_;
       original_md_.parse(sr);
       ++original_md_.fstat_.st_nlink;
       value_str = original_md_.pack();
 #if KVFS_THREAD_SAFE
       mutex_->lock();
 #endif
-      store_->merge(key_str, value_str);
+      store_->Merge(key_str, value_str);
 #if KVFS_THREAD_SAFE
       mutex_->unlock();
 #endif
@@ -1057,10 +966,10 @@ int KVFS::Link(const char *oldname, const char *newname) {
 #endif
   key_str = old_key.pack();
   value_str = old_md_.pack();
-  bool status1 = store_->merge(key_str, value_str);
+  bool status1 = store_->Merge(key_str, value_str);
   key_str = new_key.pack();
   value_str = new_md_.pack();
-  bool status2 = store_->put(key_str, value_str);
+  bool status2 = store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1081,8 +990,11 @@ int KVFS::SymLink(const char *path1, const char *path2) {
       throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
     }
   }
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>>
-      resolved_path_2 = RealPath(orig_path2.parent_path());
+
+  std::filesystem::path input = orig_path2.parent_path();
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved_path_2 = RealPath(input);
+  resolved_path_2.first.append(orig_path2.filename().string());
+  orig_path2 = resolved_path_2.first.lexically_normal();
   // The symlink() function shall create a symbolic link called path2 that contains the string pointed to by path1
   // (path2 is the name of the symbolic link created, path1 is the string contained in the symbolic link).
   //The string pointed to by path1 shall be treated only as a string and shall not be validated as a pathname.
@@ -1092,7 +1004,7 @@ int KVFS::SymLink(const char *path1, const char *path2) {
   } else {
     hash_path2 = std::filesystem::hash_value(orig_path2);
   }
-  kvfsDirKey slkey_ =
+  kvfsInodeKey slkey_ =
       {resolved_path_2.second.second.fstat_.st_ino, hash_path2};
   // check if the key names an existing file
 
@@ -1101,7 +1013,7 @@ int KVFS::SymLink(const char *path1, const char *path2) {
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1111,23 +1023,21 @@ int KVFS::SymLink(const char *path1, const char *path2) {
     throw FSError(FSErrorType::FS_EEXIST, "The path2 argument names an existing file.");
   }
   // create the symlink
-  kvfsMetaData slmd_ =
-      kvfsMetaData(resolved_path_2.first.filename(),
-                   GetFreeInode(),
-                   S_IFLNK | resolved_path_2.second.second.fstat_.st_mode,
-                   resolved_path_2.second.first);
+  kvfsInodeValue slmd_ =
+      kvfsInodeValue((orig_path2 == "/" ? orig_path2 : orig_path2.filename()),
+                     GetFreeInode(),
+                     S_IFLNK | resolved_path_2.second.second.fstat_.st_mode, slkey_);
 
   kvfsBlockKey sl_blck_key = kvfsBlockKey(slmd_.fstat_.st_ino, 0);
   size_t blcks_to_write = strlen(path1) / KVFS_DEF_BLOCK_SIZE;
   blcks_to_write += (strlen(path1) % KVFS_DEF_BLOCK_SIZE) ? 1 : 0;
-  auto pair = WriteBlocks(sl_blck_key, blcks_to_write, path1, strlen(path1), 0);
-  slmd_.last_block_key_ = pair.second;
-  slmd_.fstat_.st_size = pair.first;
+  ssize_t size = WriteBlocks(sl_blck_key, blcks_to_write, path1, strlen(path1));
+  slmd_.fstat_.st_size = size;
   value_str = slmd_.pack();
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  bool status1 = store_->put(key_str, value_str);
+  bool status1 = store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1153,22 +1063,25 @@ ssize_t KVFS::ReadLink(const char *filename, char *buffer, size_t size) {
       throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
     }
   }
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_.parent_path());
 
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>>
+      resolved = RealPath(orig_.parent_path());
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
   kvfs_file_hash_t hash;
   if (orig_ != "/") {
     hash = std::filesystem::hash_value(orig_.filename());
   } else {
     hash = std::filesystem::hash_value(orig_);
   }
-  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, hash};
+  kvfsInodeKey key = {resolved.second.second.fstat_.st_ino, hash};
 
   std::string key_str = key.pack();
   // check if the key names an existing file
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1177,7 +1090,7 @@ ssize_t KVFS::ReadLink(const char *filename, char *buffer, size_t size) {
     throw FSError(FSErrorType::FS_ENOENT,
                   "A component of path does not name an existing file or path is an empty string.");
   }
-  kvfsMetaData md_;
+  kvfsInodeValue md_;
   md_.parse(sr);
   // check if it is a symlink
   if (!S_ISLNK(md_.fstat_.st_mode)) {
@@ -1189,12 +1102,16 @@ ssize_t KVFS::ReadLink(const char *filename, char *buffer, size_t size) {
   ssize_t size_to_read = (size > md_.fstat_.st_size ? md_.fstat_.st_size : size);
   size_t blcks_to_read = size_to_read / KVFS_DEF_BLOCK_SIZE;
   blcks_to_read += (size_to_read % KVFS_DEF_BLOCK_SIZE) ? 1 : 0;
-  ssize_t pair = ReadBlocks(blck_key_, blcks_to_read, size, 0, buffer);
+  ssize_t pair = ReadBlocks(blck_key_, blcks_to_read, size, buffer);
   return pair;
 }
 int KVFS::UnLink(const char *filename) {
   // decrease file's link count by one, if it reaches zero then delete the file from store
   std::filesystem::path orig_ = std::filesystem::path(filename);
+  if (orig_.filename() == "." || orig_.filename() == "..") {
+    errorno_ = -EINVAL;
+    throw FSError(FSErrorType::FS_EINVAL, "The path argument contains a last component that is dot.");
+  }
   CheckNameLength(orig_);
   if (orig_ == "/") {
     errorno_ = -EINVAL;
@@ -1213,17 +1130,14 @@ int KVFS::UnLink(const char *filename) {
       throw FSError(FSErrorType::FS_EINVAL, "Given name is not in the correct format");
     }
   }
-
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_.parent_path());
-  if (resolved.first.filename() == "." || resolved.first.filename() == "..") {
-    errorno_ = -EINVAL;
-    throw FSError(FSErrorType::FS_EINVAL, "The path argument contains a last component that is dot.");
-  }
+
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved = RealPath(orig_.parent_path());
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
 
   kvfs_file_hash_t hash = std::filesystem::hash_value(orig_.filename());
-
-  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, hash};
+  kvfsInodeKey key = {resolved.second.second.fstat_.st_ino, hash};
 
   std::string key_str = key.pack();
   std::string value_str;
@@ -1231,7 +1145,7 @@ int KVFS::UnLink(const char *filename) {
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1239,18 +1153,19 @@ int KVFS::UnLink(const char *filename) {
     errorno_ = -ENOENT;
     throw FSError(FSErrorType::FS_ENOENT, "No such file or directory!");
   }
-  // found the file, check if it is a directory
-  kvfsMetaData md_;
+  // found the file
+  kvfsInodeValue md_;
   md_.parse(sr);
   if (S_ISLNK(md_.fstat_.st_mode)) {
     // just delete it
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    bool status = store_->delete_(key_str);
+    bool status = store_->Delete(key_str);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
+    status &= FreeUpInodeNumber(md_.fstat_.st_ino);
     return status;
   }
   // decrease link count
@@ -1260,8 +1175,8 @@ int KVFS::UnLink(const char *filename) {
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    bool status = store_->delete_(key_str);
-    store_->sync();
+    bool status = store_->Delete(key_str);
+    status &= FreeUpInodeNumber(md_.dirent_.d_ino);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
@@ -1270,14 +1185,15 @@ int KVFS::UnLink(const char *filename) {
     resolved.second.second.fstat_.st_mtim.tv_sec = time_now;
     key_str = resolved.second.first.pack();
     value_str = resolved.second.second.pack();
+
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    bool status2 = store_->put(key_str, value_str);
+    bool status2 = store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
-    return status;
+    return status & status2;
   }
   md_.fstat_.st_mtim.tv_sec = time_now;
   // update it in store
@@ -1285,7 +1201,7 @@ int KVFS::UnLink(const char *filename) {
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  bool status1 = store_->put(key_str, value_str);
+  bool status1 = store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1298,7 +1214,7 @@ int KVFS::UnLink(const char *filename) {
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  bool status2 = store_->put(key_str, value_str);
+  bool status2 = store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1338,24 +1254,28 @@ int KVFS::Rename(const char *oldname, const char *newname) {
     newname_orig = pwd_.append(newname_orig.string());
     pwd_ = prv_;
   }
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>>
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>>
       oldname_resolved = RealPath(oldname_orig.parent_path());
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>>
+  oldname_resolved.first.append(oldname_orig.filename().string());
+  oldname_orig = oldname_resolved.first.lexically_normal();
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>>
       newname_resolved = RealPath(newname_orig.parent_path());
+  newname_resolved.first.append(newname_orig.filename().string());
+  newname_orig = newname_resolved.first.lexically_normal();
   // check if oldname exists and newname doesn't exist
   kvfs_file_hash_t old_hash = std::filesystem::hash_value(oldname_orig.filename());
   kvfs_file_hash_t new_hash = std::filesystem::hash_value(newname_orig.filename());
-  kvfsDirKey old_key =
+  kvfsInodeKey old_key =
       {oldname_resolved.second.second.fstat_.st_ino, old_hash};
-  kvfsDirKey new_key =
+  kvfsInodeKey new_key =
       {newname_resolved.second.second.fstat_.st_ino, new_hash};
   key_str = old_key.pack();
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  StoreResult old_sr = store_->get(key_str);
+  KVStoreResult old_sr = store_->Get(key_str);
   key_str = new_key.pack();
-  bool new_exists = store_->get(key_str).isValid();
+  bool new_exists = store_->Get(key_str).isValid();
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1367,18 +1287,18 @@ int KVFS::Rename(const char *oldname, const char *newname) {
     errorno_ = -EEXIST;
     throw FSError(FSErrorType::FS_EEXIST, "The newname argument already exists");
   }
-  auto batch = store_->get_write_batch();
+  auto batch = store_->GetWriteBatch();
   // decrease link count on old name's parent
   oldname_resolved.second.second.fstat_.st_mtim.tv_sec = time_now;
   --oldname_resolved.second.second.fstat_.st_nlink;
   key_str = old_key.pack();
   value_str = oldname_resolved.second.second.pack();
-  batch->delete_(key_str);
+  batch->Delete(key_str);
   key_str = oldname_resolved.second.first.pack();
-  batch->delete_(key_str);
-  batch->put(key_str, value_str);
+  batch->Delete(key_str);
+  batch->Put(key_str, value_str);
   // copy over old metadata under new key
-  kvfsMetaData new_md_;
+  kvfsInodeValue new_md_;
   new_md_.parse(old_sr);
   std::string new_name = newname_resolved.first.filename();
   kvfs_dirent new_dirent{};
@@ -1387,8 +1307,8 @@ int KVFS::Rename(const char *oldname, const char *newname) {
   new_md_.dirent_ = new_dirent;
   key_str = new_key.pack();
   value_str = new_md_.pack();
-  batch->put(key_str, value_str);
-  batch->flush();
+  batch->Put(key_str, value_str);
+  batch->Flush();
   batch.reset();
   return 0;
 }
@@ -1412,29 +1332,30 @@ int KVFS::MkDir(const char *filename, mode_t mode) {
     throw FSError(FSErrorType::FS_EINVAL, "Cannot create a directory with name (\"/\") !");
   }
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_.parent_path());
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved = RealPath(orig_.parent_path());
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
 
   // now try to make dir at that parent directory
   // resolver does set current md and key to the parent of this file so use those and then update it in store.
   kvfs_file_hash_t hash = std::filesystem::hash_value(orig_.filename());
-  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, hash};
+  kvfsInodeKey key = {resolved.second.second.fstat_.st_ino, hash};
   std::string key_str = key.pack();
   std::string value_str;
 #if KVFS_THREAD_SAFE
   // lock
   mutex_->lock();
 #endif
-  if (store_->get(key_str).isValid()) {
+  if (store_->Get(key_str).isValid()) {
     // exists return error
     errorno_ = -EEXIST;
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
   }
-  kvfsMetaData md_ = kvfsMetaData(resolved.first.filename(),
-                                  GetFreeInode(),
-                                  mode | resolved.second.second.fstat_.st_mode,
-                                  resolved.second.first);
+  kvfsInodeValue md_ = kvfsInodeValue(orig_.filename(),
+                                      GetFreeInode(),
+                                      mode | resolved.second.second.fstat_.st_mode, key);
 
   // update meta data
   md_.fstat_.st_mode |= S_IFDIR;
@@ -1444,13 +1365,13 @@ int KVFS::MkDir(const char *filename, mode_t mode) {
   md_.fstat_.st_ctim.tv_sec = time_now;
   // update it in store
   value_str = md_.pack();
-  bool status1 = store_->put(key_str, value_str);
+  bool status1 = store_->Put(key_str, value_str);
   // update the parent
   ++resolved.second.second.fstat_.st_nlink;
   resolved.second.second.fstat_.st_mtim.tv_sec = time_now;
   key_str = resolved.second.first.pack();
   value_str = resolved.second.second.pack();
-  bool status2 = store_->put(key_str, value_str);
+  bool status2 = store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1473,7 +1394,10 @@ int KVFS::Stat(const char *filename, kvfs_stat *buf) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_.parent_path());
+  std::filesystem::path input = orig_.parent_path();
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved = RealPath(input);
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
   kvfs_file_hash_t hash;
   if (orig_ != "/") {
     hash = std::filesystem::hash_value(orig_.filename());
@@ -1481,12 +1405,12 @@ int KVFS::Stat(const char *filename, kvfs_stat *buf) {
     hash = std::filesystem::hash_value(orig_);
   }
   // check for existing file
-  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, hash};
+  kvfsInodeKey key = {resolved.second.second.fstat_.st_ino, hash};
   std::string key_str = key.pack();
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1495,18 +1419,18 @@ int KVFS::Stat(const char *filename, kvfs_stat *buf) {
     throw FSError(FSErrorType::FS_ENOENT,
                   "A component of path does not name an existing file or path is an empty string.");
   }
-  kvfsMetaData md_;
+  kvfsInodeValue md_;
   md_.parse(sr);
   *buf = md_.fstat_;
   return 0;
 }
 off_t KVFS::LSeek(int filedes, off_t offset, int whence) {
   kvfsFileHandle fh_;
-  bool status = open_fds_->find(filedes, fh_);
+  bool status = open_fds_->Find(filedes, fh_);
   ssize_t read = 0;
   if (!status) {
     errorno_ = -EBADFD;
-    throw FSError(FSErrorType::FS_EBADF, "The file descriptor doesn't name a opened file, invalid fd");
+    throw FSError(FSErrorType::FS_EBADFD, "The file descriptor doesn't name a opened file, invalid fd");
   }
 
   //  If whence is SEEK_SET, the file offset shall be set to offset bytes.
@@ -1524,8 +1448,8 @@ off_t KVFS::LSeek(int filedes, off_t offset, int whence) {
     fh_.md_.fstat_.st_size += offset;
   }
   result = fh_.offset_;
-  open_fds_->evict(filedes);
-  open_fds_->insert(filedes, fh_);
+  open_fds_->Evict(filedes);
+  open_fds_->Insert(filedes, fh_);
 
   return result;
 }
@@ -1539,7 +1463,7 @@ ssize_t KVFS::CopyFileRange(int inputfd,
   return -1;
 }
 void KVFS::Sync() {
-  store_->sync();
+  store_->Sync();
 }
 int KVFS::FSync(int filedes) {
   // currently only same as sync
@@ -1549,11 +1473,11 @@ int KVFS::FSync(int filedes) {
 ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
   // only read the file from offset argument, doesn't modify filedes offset
   kvfsFileHandle fh_;
-  bool status = open_fds_->find(filedes, fh_);
+  bool status = open_fds_->Find(filedes, fh_);
   ssize_t read = 0;
   if (!status) {
     errorno_ = -EBADFD;
-    throw FSError(FSErrorType::FS_EBADF, "The file descriptor doesn't name a opened file, invalid fd");
+    throw FSError(FSErrorType::FS_EBADFD, "The file descriptor doesn't name a opened file, invalid fd");
   }
   // check flags first
   if (offset > fh_.md_.fstat_.st_size) {
@@ -1571,7 +1495,7 @@ ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
       // update accesstimes on the file
       fh_.md_.fstat_.st_atim.tv_sec = time_now;
     }
-    open_fds_->insert(filedes, fh_);
+    open_fds_->Insert(filedes, fh_);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
@@ -1591,7 +1515,7 @@ ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
   void *idx = buffer;
   std::string key_str = blck_key_.pack();
   std::string value_str;
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
   if (sr.isValid()) {
     kvfsBlockValue bv_;
     bv_.parse(sr);
@@ -1602,7 +1526,7 @@ ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    store_->put(key_str, value_str);
+    store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
@@ -1612,7 +1536,7 @@ ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
   size_can_read -= read;
   size_t blocks_to_read_ = size_can_read / KVFS_DEF_BLOCK_SIZE;
   blocks_to_read_ += ((size_can_read % KVFS_DEF_BLOCK_SIZE) > 0) ? 1 : 0;
-  read += ReadBlocks(blck_key_, blocks_to_read_, size_can_read, 0, idx);
+  read += ReadBlocks(blck_key_, blocks_to_read_, size_can_read, idx);
   // finished
   // update stats and return
 #if KVFS_THREAD_SAFE
@@ -1622,7 +1546,7 @@ ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
     // update accesstimes on the file
     fh_.md_.fstat_.st_atim.tv_sec = time_now;
   }
-  open_fds_->insert(filedes, fh_);
+  open_fds_->Insert(filedes, fh_);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1631,11 +1555,11 @@ ssize_t KVFS::PRead(int filedes, void *buffer, size_t size, off_t offset) {
 
 ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset) {
   kvfsFileHandle fh_;
-  bool status = open_fds_->find(filedes, fh_);
+  bool status = open_fds_->Find(filedes, fh_);
   ssize_t written = 0;
   if (!status) {
     errorno_ = -EBADFD;
-    throw FSError(FSErrorType::FS_EBADF, "The file descriptor doesn't name a opened file, invalid fd");
+    throw FSError(FSErrorType::FS_EBADFD, "The file descriptor doesn't name a opened file, invalid fd");
   }
   // check flags first
 
@@ -1655,7 +1579,7 @@ ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset)
       // update accesstimes on the file
       fh_.md_.fstat_.st_atim.tv_sec = time_now;
     }
-    open_fds_->insert(filedes, fh_);
+    open_fds_->Insert(filedes, fh_);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
@@ -1673,7 +1597,7 @@ ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset)
   std::string key_str = blck_key_.pack();
   std::string value_str;
 
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
   if (sr.isValid()) {
     kvfsBlockValue bv_;
     bv_.parse(sr);
@@ -1684,7 +1608,7 @@ ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset)
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    store_->put(key_str, value_str);
+    store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
@@ -1694,12 +1618,11 @@ ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset)
   size_t size_left = size - written;
   size_t blocks_to_write_ = (size_left) / KVFS_DEF_BLOCK_SIZE;
   blocks_to_write_ += ((size_left % KVFS_DEF_BLOCK_SIZE) > 0) ? 1 : 0;
-  std::pair<ssize_t, kvfs::kvfsBlockKey> result =
-      WriteBlocks(blck_key_, blocks_to_write_, idx, size_left, 0);
-  written += result.first;
+  ssize_t result =
+      WriteBlocks(blck_key_, blocks_to_write_, idx, size_left);
+  written += result;
 
   // update stats
-  fh_.md_.last_block_key_ = result.second;
   fh_.md_.fstat_.st_size += written;
   fh_.md_.fstat_.st_mtim.tv_sec = time_now;
 #if KVFS_THREAD_SAFE
@@ -1707,7 +1630,7 @@ ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset)
 #endif
   fh_.offset_ += written;
   // update this filedes in cache
-  open_fds_->insert(filedes, fh_);
+  open_fds_->Insert(filedes, fh_);
   // finished
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
@@ -1735,8 +1658,10 @@ int KVFS::ChMod(const char *filename, mode_t mode) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_.parent_path());
-
+  std::filesystem::path input = orig_.parent_path();
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved = RealPath(input);
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
   kvfs_file_hash_t hash;
   if (orig_ != "/") {
     hash = std::filesystem::hash_value(orig_.filename());
@@ -1744,13 +1669,13 @@ int KVFS::ChMod(const char *filename, mode_t mode) {
     hash = std::filesystem::hash_value(orig_);
   }
   // check for existing file
-  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, hash};
+  kvfsInodeKey key = {resolved.second.second.fstat_.st_ino, hash};
   std::string key_str = key.pack();
   std::string value_str;
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1759,7 +1684,7 @@ int KVFS::ChMod(const char *filename, mode_t mode) {
     throw FSError(FSErrorType::FS_ENOENT,
                   "A component of path does not name an existing file or path is an empty string.");
   }
-  kvfsMetaData md_;
+  kvfsInodeValue md_;
   md_.parse(sr);
   md_.fstat_.st_uid = mode & S_ISUID;
   md_.fstat_.st_gid = mode & S_ISGID;
@@ -1769,7 +1694,7 @@ int KVFS::ChMod(const char *filename, mode_t mode) {
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  bool status = store_->merge(key_str, value_str);
+  bool status = store_->Merge(key_str, value_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1792,8 +1717,10 @@ int KVFS::Access(const char *filename, int how) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_.parent_path());
-
+  std::filesystem::path input = orig_.parent_path();
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved = RealPath(input);
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
   kvfs_file_hash_t hash;
   if (orig_ != "/") {
     hash = std::filesystem::hash_value(orig_.filename());
@@ -1801,12 +1728,12 @@ int KVFS::Access(const char *filename, int how) {
     hash = std::filesystem::hash_value(orig_);
   }
   // check for existing file
-  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, hash};
+  kvfsInodeKey key = {resolved.second.second.fstat_.st_ino, hash};
   std::string key_str = key.pack();
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1815,7 +1742,7 @@ int KVFS::Access(const char *filename, int how) {
     throw FSError(FSErrorType::FS_ENOENT,
                   "A component of path does not name an existing file or path is an empty string.");
   }
-  kvfsMetaData md_;
+  kvfsInodeValue md_;
   md_.parse(sr);
   if (!(md_.fstat_.st_mode & how)) {
     errorno_ = -EACCES;
@@ -1841,8 +1768,10 @@ int KVFS::UTime(const char *filename, const struct utimbuf *times) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_.parent_path());
-
+  std::filesystem::path input = orig_.parent_path();
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved = RealPath(input);
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
   kvfs_file_hash_t hash;
   if (orig_ != "/") {
     hash = std::filesystem::hash_value(orig_.filename());
@@ -1851,13 +1780,13 @@ int KVFS::UTime(const char *filename, const struct utimbuf *times) {
   }
 
   // check for existing file
-  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, hash};
+  kvfsInodeKey key = {resolved.second.second.fstat_.st_ino, hash};
   std::string key_str = key.pack();
   std::string value_str;
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1866,7 +1795,7 @@ int KVFS::UTime(const char *filename, const struct utimbuf *times) {
     throw FSError(FSErrorType::FS_ENOENT,
                   "A component of path does not name an existing file or path is an empty string.");
   }
-  kvfsMetaData md_;
+  kvfsInodeValue md_;
   md_.parse(sr);
   md_.fstat_.st_mtim.tv_sec = times->modtime;
   md_.fstat_.st_atim.tv_sec = times->actime;
@@ -1875,7 +1804,7 @@ int KVFS::UTime(const char *filename, const struct utimbuf *times) {
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  bool status = store_->put(key_str, value_str);
+  bool status = store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1900,20 +1829,23 @@ int KVFS::Truncate(const char *filename, off_t length) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_.parent_path());
+  std::filesystem::path input = orig_.parent_path();
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved = RealPath(input);
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
   kvfs_file_hash_t hash;
   if (orig_ != "/") {
     hash = std::filesystem::hash_value(orig_.filename());
   } else {
     hash = std::filesystem::hash_value(orig_);
   }
-  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, hash};
+  kvfsInodeKey key = {resolved.second.second.fstat_.st_ino, hash};
   std::string key_str = key.pack();
   std::string value_str;
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  StoreResult sr = store_->get(key_str);
+  KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -1922,7 +1854,7 @@ int KVFS::Truncate(const char *filename, off_t length) {
     throw FSError(FSErrorType::FS_ENOENT,
                   "The filename arguments doesn't name an existing file or its an empty string");
   }
-  kvfsMetaData md_;
+  kvfsInodeValue md_;
   md_.parse(sr);
   kvfs_off_t new_number_of_blocks = length / KVFS_DEF_BLOCK_SIZE;
   new_number_of_blocks += (length % KVFS_DEF_BLOCK_SIZE) ? 1 : 0;
@@ -1930,40 +1862,46 @@ int KVFS::Truncate(const char *filename, off_t length) {
   if (md_.fstat_.st_size > length) {
     // shrink it to length
     md_.fstat_.st_size = length;
-    md_.last_block_key_.block_number_ = new_number_of_blocks;
   } else {
+    kvfs_off_t blck_offset = md_.fstat_.st_size / KVFS_DEF_BLOCK_SIZE;
+    blck_offset += (md_.fstat_.st_size % KVFS_DEF_BLOCK_SIZE) ? 1 : 0;
     // extend it, and put null bytes in the blocks
     md_.fstat_.st_size = length;
     // check how many to add
-    kvfs_off_t blocks_to_add = new_number_of_blocks - md_.last_block_key_.block_number_;
+    kvfs_off_t blocks_to_add = new_number_of_blocks - blck_offset;
     // get file's last block to build linked list
-    key_str = md_.last_block_key_.pack();
+    kvfsBlockKey last_block_key{};
+    last_block_key.inode_ = md_.fstat_.st_ino;
+    last_block_key.block_number_ = blck_offset;
+    key_str = last_block_key.pack();
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    StoreResult sr = store_->get(key_str);
+    sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
     if (!sr.isValid()) {
+      // error getting file's last block
       return -1;
     }
     kvfsBlockValue bv_;
     bv_.parse(sr);
-    kvfsBlockKey key_ = bv_.next_block_;
+    kvfsBlockKey block_key = last_block_key;
+    block_key.block_number_ += 1;
     // now extend it from here
-    auto batch = store_->get_write_batch();
+    auto batch = store_->GetWriteBatch();
+    kvfsBlockValue tmp_ = kvfsBlockValue();
     for (int i = 0; i < blocks_to_add; ++i) {
-      kvfsBlockValue tmp_ = kvfsBlockValue();
-      tmp_.next_block_ = {key_.inode_, key_.block_number_ + 1};
+      tmp_.next_block_ = block_key;
+      tmp_.next_block_.block_number_ += 1;
       key_str = key.pack();
       value_str = tmp_.pack();
-      batch->put(key_str, value_str);
-      key_ = tmp_.next_block_;
+      batch->Put(key_str, value_str);
+      block_key = tmp_.next_block_;
     }
-    batch->flush();
+    batch->Flush();
     batch.reset();
-    md_.last_block_key_ = key_;
   }
   // update acccesstimes and modification times
   md_.fstat_.st_atim.tv_sec = time_now;
@@ -1977,7 +1915,7 @@ int KVFS::Truncate(const char *filename, off_t length) {
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  bool status = store_->merge(key_str, value_str);
+  bool status = store_->Merge(key_str, value_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -2000,7 +1938,10 @@ int KVFS::Mknod(const char *filename, mode_t mode, dev_t dev) {
   }
 
   // Attemp to resolve the real path from given path
-  std::pair<std::filesystem::path, std::pair<kvfsDirKey, kvfsMetaData>> resolved = RealPath(orig_.parent_path());
+  std::pair<std::filesystem::path, std::pair<kvfsInodeKey, kvfsInodeValue>> resolved = RealPath(orig_.parent_path());
+  resolved.first.append(orig_.filename().string());
+  orig_ = resolved.first.lexically_normal();
+
   kvfs_file_hash_t hash;
   if (orig_ != "/") {
     hash = std::filesystem::hash_value(orig_.filename());
@@ -2008,24 +1949,23 @@ int KVFS::Mknod(const char *filename, mode_t mode, dev_t dev) {
     hash = std::filesystem::hash_value(orig_);
   }
 
-  kvfsDirKey key = {resolved.second.second.fstat_.st_ino, hash};
+  kvfsInodeKey key = {resolved.second.second.fstat_.st_ino, hash};
   std::string key_str = key.pack();
   std::string value_str;
 #if KVFS_THREAD_SAFE
   // lock
   mutex_->lock();
 #endif
-  if (store_->get(key_str).isValid()) {
+  if (store_->Get(key_str).isValid()) {
     // exists return error
     errorno_ = -EEXIST;
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
   }
-  kvfsMetaData md_ = kvfsMetaData(resolved.first.filename(),
-                                  GetFreeInode(),
-                                  mode | resolved.second.second.fstat_.st_mode,
-                                  resolved.second.first);
+  kvfsInodeValue md_ = kvfsInodeValue(orig_.filename(),
+                                      GetFreeInode(),
+                                      mode | resolved.second.second.fstat_.st_mode, key);
   md_.fstat_.st_dev = dev;
   md_.fstat_.st_gid = mode;
   md_.fstat_.st_uid = mode;
@@ -2036,7 +1976,7 @@ int KVFS::Mknod(const char *filename, mode_t mode, dev_t dev) {
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  bool status = store_->put(key_str, value_str);
+  bool status = store_->Put(key_str, value_str);
 #if KVFS_THREAD_SAFE
   mutex_->unlock();
 #endif
@@ -2045,51 +1985,48 @@ int KVFS::Mknod(const char *filename, mode_t mode, dev_t dev) {
   resolved.second.second.fstat_.st_mtim.tv_sec = time_now;
   key_str = resolved.second.first.pack();
   value_str = resolved.second.second.pack();
-  bool status2 = store_->put(key_str, value_str);
+  bool status2 = store_->Put(key_str, value_str);
   return status;
 }
 void KVFS::TuneFS() {
-  store_->compact();
+  store_->Compact();
 
-  store_->sync();
+  store_->Sync();
 }
 void KVFS::DestroyFS() {
-  if (!store_->destroy()) {
+  if (!store_->Destroy()) {
     throw FSError(FSErrorType::FS_EIO, "Failed to destroy store");
   }
   store_.reset();
-//  inode_cache_.reset();
   open_fds_.reset();
-
   std::filesystem::remove_all(root_path);
 }
 uint32_t KVFS::GetFreeFD() {
+  uint32_t fi;
+  if (!free_fds.empty()) {
+    fi = free_fds.back();
+    free_fds.pop_back();
+    return fi;
+  }
   if (next_free_fd_ == KVFS_MAX_OPEN_FILES) {
     // error too many open files
     errorno_ = -ENFILE;
     throw FSError(FSErrorType::FS_ENFILE, "Too many files are currently open in the system.");
   } else {
-    uint32_t fi = next_free_fd_;
+    fi = next_free_fd_;
     ++next_free_fd_;
     return fi;
   }
 }
-std::pair<ssize_t, kvfs::kvfsBlockKey> KVFS::WriteBlocks(kvfsBlockKey blck_key_,
-                                                         size_t blcks_to_write_,
-                                                         const void *buffer,
-                                                         size_t buffer_size_,
-                                                         kvfs_off_t offset) {
-  std::unique_ptr<Store::WriteBatch> batch = store_->get_write_batch();
+ssize_t KVFS::WriteBlocks(kvfsBlockKey blck_key_, size_t blcks_to_write_, const void *buffer, size_t buffer_size_) {
+  std::unique_ptr<KVStore::WriteBatch> batch = store_->GetWriteBatch();
   const void *idx = buffer;
   ssize_t written = 0;
   std::string key_str;
   std::string value_str;
   kvfsBlockValue *bv_ = new kvfsBlockValue();
   for (size_t i = 0; i < blcks_to_write_; ++i) {
-    std::pair<ssize_t, const void *> pair = FillBlock(bv_, idx, buffer_size_, offset);
-    if (pair.first > 0) {
-      offset = 0;
-    }
+    std::pair<ssize_t, const void *> pair = FillBlock(bv_, idx, buffer_size_, 0);
     // if buffer size is still big get another block
     if (buffer_size_ > KVFS_DEF_BLOCK_SIZE) {
       bv_->next_block_ = kvfsBlockKey();
@@ -2101,7 +2038,7 @@ std::pair<ssize_t, kvfs::kvfsBlockKey> KVFS::WriteBlocks(kvfsBlockKey blck_key_,
 #endif
     key_str = blck_key_.pack();
     value_str = bv_->pack();
-    batch->put(key_str, value_str);
+    batch->Put(key_str, value_str);
     buffer_size_ -= pair.first;
     written += pair.first;
     // update offset
@@ -2109,10 +2046,10 @@ std::pair<ssize_t, kvfs::kvfsBlockKey> KVFS::WriteBlocks(kvfsBlockKey blck_key_,
     blck_key_ = bv_->next_block_;
   }
   // flush the write batch
-  batch->flush();
+  batch->Flush();
   batch.reset();
-  delete[](bv_);
-  return std::pair<ssize_t, kvfs::kvfsBlockKey>(written, blck_key_);
+  delete (bv_);
+  return written;
 }
 std::pair<ssize_t, const void *> KVFS::FillBlock(kvfsBlockValue *blck_,
                                                  const void *buffer,
@@ -2131,11 +2068,7 @@ std::pair<ssize_t, const void *> KVFS::FillBlock(kvfsBlockValue *blck_,
     return std::pair<ssize_t, const void *>(max_writtable_size, idx);
   }
 }
-ssize_t KVFS::ReadBlocks(kvfsBlockKey blck_key_,
-                         size_t blcks_to_read_,
-                         size_t buffer_size_,
-                         off_t offset,
-                         void *buffer) {
+ssize_t KVFS::ReadBlocks(kvfsBlockKey blck_key_, size_t blcks_to_read_, size_t buffer_size_, void *buffer) {
   void *idx = buffer;
   ssize_t read = 0;
   kvfsBlockValue bv_;
@@ -2144,7 +2077,7 @@ ssize_t KVFS::ReadBlocks(kvfsBlockKey blck_key_,
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    StoreResult sr = store_->get(key_str);
+    KVStoreResult sr = store_->Get(key_str);
 #if KVFS_THREAD_SAFE
     mutex_->unlock();
 #endif
@@ -2153,10 +2086,7 @@ ssize_t KVFS::ReadBlocks(kvfsBlockKey blck_key_,
 #ifdef KVFS_DEBUG
       std::cout << blck_key_.block_number_ <<" " << std::string((char *)bv_.data) << std::endl;
 #endif
-      std::pair<ssize_t, void *> pair = ReadBlock(&bv_, idx, buffer_size_, offset);
-      if (pair.first > 0) {
-        offset = 0;
-      }
+      std::pair<ssize_t, void *> pair = ReadBlock(&bv_, idx, buffer_size_, 0);
       idx = pair.second;
       read += pair.first;
       blck_key_ = bv_.next_block_;
@@ -2184,7 +2114,7 @@ std::pair<ssize_t, void *> KVFS::ReadBlock(kvfsBlockValue *blck_, void *buffer, 
   }
 }
 std::pair<std::filesystem::path,
-          std::pair<kvfs::kvfsDirKey, kvfs::kvfsMetaData>> KVFS::RealPath(const std::filesystem::path &input) {
+          std::pair<kvfs::kvfsInodeKey, kvfs::kvfsInodeValue>> KVFS::RealPath(const std::filesystem::path &input) {
   int symlink_loops = 0;
   std::filesystem::path real_path = input;
   for (;;) {
@@ -2205,10 +2135,13 @@ std::pair<std::filesystem::path,
   }
 }
 int KVFS::UnMount() {
-  kvfsDirKey root_key = {0, std::filesystem::hash_value("/")};
   std::string value_str = super_block_.pack();
-  store_->put("superblock", value_str);
+  store_->Put("superblock", value_str);
+  store_->Sync();
   return 0;
+}
+void KVFS::FreeUpFD(uint32_t filedes) {
+  free_fds.push_back(filedes);
 }
 
 }  // namespace kvfs

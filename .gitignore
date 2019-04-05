@@ -11,3 +11,4 @@ CTestTestfile.cmake
 .idea/
 cmake-build*
 build
+out/

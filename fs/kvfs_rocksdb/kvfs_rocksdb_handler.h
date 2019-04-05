@@ -17,15 +17,6 @@
 #include "rocksdb/status.h"
 #include "rocksdb/cache.h"
 
-using rocksdb::DB;
-using rocksdb::Options;
-using rocksdb::ReadOptions;
-using rocksdb::Status;
-using rocksdb::WriteOptions;
-using rocksdb::Options;
-using rocksdb::Cache;
-using std::string;
-
 namespace kvfs {
 
 /**
@@ -44,7 +35,7 @@ struct RocksHandles {
    * returned.  If there is no existing RocksDB at that location a new one will
    * be initialized .
    */
-  explicit RocksHandles(string dbPath);
+  explicit RocksHandles(const std::string &dbPath);
 
   RocksHandles(const RocksHandles &) = delete;
   RocksHandles &operator=(const RocksHandles &) = delete;
@@ -72,7 +63,7 @@ struct RocksIterator {
 };
 
 struct RocksCache {
-  std::shared_ptr<Cache> cache;
+  std::shared_ptr<rocksdb::Cache> cache;
 
   ~RocksCache();
 

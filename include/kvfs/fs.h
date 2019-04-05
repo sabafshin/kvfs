@@ -31,7 +31,13 @@ class FS {
   ~FS() = default;
 
   /*############## POSIX Operations ##############*/
-
+  /*
+   * The respective function definitions and comments are closely similar and inspired by GNU C Library
+   * and IEEE POSIX.1-2017 standards
+   * references:
+   * https://www.gnu.org/software/libc/manual/html_node/File-System-Interface.html#File-System-Interface
+   * https://pubs.opengroup.org/onlinepubs/9699919799/
+   */
   /**
    * @brief The getcwd function returns an absolute file name representing the current working directory,
    * storing it in the character array buffer that you provide. The size argument is how you tell the system
@@ -59,7 +65,7 @@ class FS {
    * in PWD is using one or more symbolic links, in which case the value returned by getcwd
    * would resolve the symbolic links and therefore yield a different result.
    */
-  virtual char *GetCurrentDirName() = 0;
+  virtual std::string GetCurrentDirName() = 0;
   /**
     * @brief This function is used to set the process’s working directory to directory
     * associated with the file descriptor filedes.
@@ -421,11 +427,6 @@ class FS {
   virtual int Mknod(const char *filename, mode_t mode, dev_t dev) = 0;
 
   /**
-   * Trigger compaction and tuning for the undelying key-value store.
-   */
-  virtual void TuneFS() = 0;
-
-  /**
    * The open function creates and returns a new file descriptor for the file named by filename.
    * Initially, the file position indicator for the file is at the beginning of the file.
    * @param filename
@@ -727,9 +728,24 @@ ESPIPE
    */
   virtual ssize_t PWrite(int filedes, const void *buffer, size_t size, off_t offset) = 0;
 
+  /**
+   * Deletes all the files under the mounted point, eveything is lost
+   */
   virtual void DestroyFS() = 0;
 
+  /**
+   * Needs to be called when all the io operations are done with filesystem, to safely close any remaining operations
+   * If this function is not called before the file system pointer is deleted,
+   * there is a risk of loosing all the new modifications.
+   * @return 0 if successfull , -1 otherwise
+   */
   virtual int UnMount() = 0;
+
+  /**
+    * Trigger compaction and tuning for the underlying key-value store.
+    */
+  virtual void TuneFS() = 0;
+
 };
 
 #endif //FILESYSTEM_H

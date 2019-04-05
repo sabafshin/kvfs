@@ -10,11 +10,14 @@
 #ifndef KVFS_KVFS_LEVELDB_HANDLER_H
 #define KVFS_KVFS_LEVELDB_HANDLER_H
 
+#include "kvfs_leveldb_exception.h"
+#include <kvfs_config.h>
 #include <memory>
 #include <string>
 #include <leveldb/db.h>
 #include <leveldb/status.h>
 #include <leveldb/options.h>
+#include <leveldb/cache.h>
 
 namespace kvfs {
 
@@ -23,7 +26,7 @@ struct LevelDBHandles {
 
   ~LevelDBHandles();
 
-  explicit LevelDBHandles(std::string dbPath);
+  explicit LevelDBHandles(const std::string &dbPath);
 
   LevelDBHandles(const LevelDBHandles &) = delete;
   LevelDBHandles &operator=(const LevelDBHandles &) = delete;

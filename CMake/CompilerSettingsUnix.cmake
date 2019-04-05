@@ -3,6 +3,7 @@ set(CMAKE_CXX_FLAGS_COMMON "-g")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_COMMON}")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_COMMON} -O3")
 
+add_compile_options("-march=native")
 add_compile_options("-std=c++17")
 add_compile_options("-lstdc++fs")
 add_link_options("-lstdc++fs")
