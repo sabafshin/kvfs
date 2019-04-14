@@ -661,9 +661,10 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
 #if KVFS_THREAD_SAFE
     mutex_->lock();
 #endif
-    fh_.md_.fstat_.st_size += written;
-    fh_.offset_ += written;
-    fh_.md_.fstat_.st_mtim.tv_sec = time_now;
+    fh_.md_.fstat_.st_size += written + 1;
+    fh_.offset_ = fh_.md_.fstat_.st_size;
+    if ((fh_.flags_ & O_NOATIME) == 0)
+      fh_.md_.fstat_.st_mtim.tv_sec = time_now;
     // update this filedes in cache
     open_fds_->Insert(filedes, fh_);
     // finished
@@ -673,10 +674,7 @@ ssize_t kvfs::KVFS::Write(int filedes, const void *buffer, size_t size) {
     return written;
   } else {
     // call to PWrite to write from offset
-    written = PWrite(filedes, buffer, size, fh_.offset_);
-    fh_.offset_ += written;
-    open_fds_->Insert(filedes, fh_);
-    return written;
+    return PWrite(filedes, buffer, size, fh_.offset_);
   }
 }
 kvfs_file_inode_t kvfs::KVFS::GetFreeInode() {
@@ -1569,23 +1567,6 @@ ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset)
     throw FSError(FSErrorType::FS_EINTR, "The offset argument exceeds the filedes's file size.");
   }
 
-  if (offset == fh_.md_.fstat_.st_size) {
-    // eof
-    // update stats and return
-#if KVFS_THREAD_SAFE
-    mutex_->lock();
-#endif
-    if (!(fh_.flags_ & O_NOATIME)) {
-      // update accesstimes on the file
-      fh_.md_.fstat_.st_atim.tv_sec = time_now;
-    }
-    open_fds_->Insert(filedes, fh_);
-#if KVFS_THREAD_SAFE
-    mutex_->unlock();
-#endif
-    return written;
-  }
-
   // determine which block to write from, then
   // pass that to blocks writer.
 
@@ -1623,12 +1604,14 @@ ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset)
   written += result;
 
   // update stats
-  fh_.md_.fstat_.st_size += written;
-  fh_.md_.fstat_.st_mtim.tv_sec = time_now;
+  if ((fh_.flags_ & O_NOATIME) == 0)
+    fh_.md_.fstat_.st_mtim.tv_sec = time_now;
+  fh_.offset_ += written;
+  fh_.md_.fstat_.st_size += (fh_.offset_ >= fh_.md_.fstat_.st_size) ? fh_.offset_ + 1 : 0;
+
 #if KVFS_THREAD_SAFE
   mutex_->lock();
 #endif
-  fh_.offset_ += written;
   // update this filedes in cache
   open_fds_->Insert(filedes, fh_);
   // finished
