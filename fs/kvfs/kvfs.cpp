@@ -1608,7 +1608,7 @@ ssize_t KVFS::PWrite(int filedes, const void *buffer, size_t size, off_t offset)
     fh_.md_.fstat_.st_mtim.tv_sec = time_now;
   fh_.offset_ += written;
 
-  fh_.md_.fstat_.st_size = (fh_.offset_ >= fh_.md_.fstat_.st_size) ? fh_.offset_ + 1 : fh_.md_.fstat_.st_size;
+  fh_.md_.fstat_.st_size = (fh_.offset_ > fh_.md_.fstat_.st_size) ? fh_.offset_ : fh_.md_.fstat_.st_size;
 
 #if KVFS_THREAD_SAFE
   mutex_->lock();
