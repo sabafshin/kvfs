@@ -1,0 +1,22 @@
+language: cpp
+dist: bionic
+compiler: gcc
+os:
+  - linux
+branches:
+  only:
+    - master
+addons:
+  apt:
+    update: true
+    packages:
+      - build-essential
+      - g++-8
+      - gcc-8
+      - cmake
+      - libsnappy-dev
+script:
+  - mkdir build
+  - cd build
+  - cmake DCMAKE_BUILD_TYPE=Release -DBuildWithLevelDB=ON ../
+  - cmake --build . -- -j 16
