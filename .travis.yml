@@ -6,19 +6,25 @@ os:
 branches:
   only:
     - master
+matrix:
+  include:
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-8
+            - gcc-8
+      env:
+        - MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
+
 before_install:
   - sudo apt update
   - sudo apt upgrade -y
   - sudo apt install build-essential g++-8 gcc-8 cmake libsnappy-dev -y
-#addons:
-#  apt:
-#    update: true
-#    packages:
-#      - build-essential
-#      - g++-8
-#      - gcc-8
-#      - cmake
-#      - libsnappy-dev
+  - eval "${MATRIX_EVAL}"
+
 script:
   - mkdir build
   - cd build
