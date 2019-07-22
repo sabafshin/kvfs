@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/ATALOO/kvfs.svg?branch=master)](https://travis-ci.com/ATALOO/kvfs)
+
 # kvfs
 A User space POSIX compliant file-system based on key-value stores
 
